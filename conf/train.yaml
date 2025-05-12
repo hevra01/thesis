@@ -1,25 +1,31 @@
 # "defaults" defines which configuration files should be merged together to create the full config tree.
-
 defaults:
 - hydra: default
-- dataset: cifar10
-- dgm: diffusion
+- dataset: MNIST
+- model: MLPUnet
 - _self_
 
 
 train:
-  dgm: ${dgm}
+  device: cuda  # or "cpu"
+
+  model: ${model}
 
   loader: 
+    _target_: torch.utils.data.DataLoader
+    dataset: ${dataset.train}
     batch_size: 128
     shuffle: True
-    num_workers: 40
-
-  val_loader:
-    batch_size: 128
     num_workers: 40
 
   trainer: 
     max_epochs: 1000
 
   ckpt_path: null
+
+  optimizer:
+    _target_: torch.optim.Adam
+    lr: 0.001
+
+  loss:
+    _target_: torch.nn.MSELoss
