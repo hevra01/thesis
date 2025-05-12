@@ -1,0 +1,8 @@
+# where to keep the logs
+run:
+  dir: ${out_dir}/hydra/${now:%Y-%m-%d}/${now:%H\:%M\:%S}
+
+#  Sweep to Tune a Hyperparameter
+sweep:
+  dir: ${out_dir}/hydra/${now:%Y-%m-%d}/${now:%H\:%M\:%S}-sweep
+  subdir: ${hydra.job.override_dirname}
