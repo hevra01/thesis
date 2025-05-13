@@ -1,4 +1,4 @@
-_target_: MLPUnet  # Required by Hydra to know which class to instantiate
+_target_: thesis.models.mlp.MLPUnet  # Required by Hydra to know which class to instantiate
 data_dim: ${dataset.data_dim}  
 hidden_sizes: [4096, 2048, 1024, 1024, 512, 512]
 time_embedding_dim: 128

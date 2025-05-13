@@ -1,7 +1,6 @@
 defaults:
-# The reason you can inject fields like transform into the dataset config from your experiment yaml is because of the override keyword.
-  - override /dataset: MNIST
-  - override /model: MLPUnet
+  - /model: MLPUnet
+  - override/dataset: MNIST
 
 dataset:
 # in MNIST.yaml, the transform wasn't defined because it is experiment specific. 

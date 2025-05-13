@@ -10,7 +10,7 @@ from utils.train_utils import train_one_epoch
 
 @hydra.main(version_base=None, config_path="conf", config_name="train")
 def main(cfg: DictConfig):
-
+    print("hev")
     # Set device
     device = torch.device(cfg.train.device)
     if device.type == "cuda" and not torch.cuda.is_available():
@@ -20,9 +20,11 @@ def main(cfg: DictConfig):
 
     # Configure dataset
     train_loader = instantiate(cfg.train.loader)
+    print(train_loader)
 
     # Configure model
     model = instantiate(cfg.train.model).to(device)  # instantiate the model
+    print(model)
 
     # Configure optimizer and loss function
     optimizer = instantiate(cfg.train.optimizer, params=model.parameters())

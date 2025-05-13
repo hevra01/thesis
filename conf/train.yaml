@@ -4,15 +4,11 @@ out_dir: ./outputs # where to keep the logs
 defaults:
 - experiment: ??? # the value of this key is set in the command line
 - hydra: default
-- dataset: ${dataset}
-- model: ${model}
 - _self_
 
 
 train:
   device: cuda  # or "cpu"
-
-  model: ${model}
 
   loader: 
     _target_: torch.utils.data.DataLoader
