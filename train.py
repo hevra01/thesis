@@ -8,13 +8,15 @@ from utils.train_utils import train_one_epoch
 
 
 
-@hydra.main(version_base=None, config_path="../conf/", config_name="train")
+@hydra.main(version_base=None, config_path="conf", config_name="train")
 def main(cfg: DictConfig):
 
     # Set device
     device = torch.device(cfg.train.device)
     if device.type == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available. Please check your CUDA installation.")
+    
+    print(f"Using device: {device}")
 
     # Configure dataset
     train_loader = instantiate(cfg.train.loader)

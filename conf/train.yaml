@@ -1,8 +1,11 @@
+out_dir: ./outputs # where to keep the logs
+
 # "defaults" defines which configuration files should be merged together to create the full config tree.
 defaults:
+- experiment: ??? # the value of this key is set in the command line
 - hydra: default
-- dataset: MNIST
-- model: MLPUnet
+- dataset: ${dataset}
+- model: ${model}
 - _self_
 
 
@@ -14,18 +17,17 @@ train:
   loader: 
     _target_: torch.utils.data.DataLoader
     dataset: ${dataset.train}
-    batch_size: 128
+    batch_size: ${batch_size}
     shuffle: True
     num_workers: 40
 
   trainer: 
-    max_epochs: 1000
+    max_epochs: ${max_epochs}
 
   ckpt_path: null
 
   optimizer:
-    _target_: torch.optim.Adam
-    lr: 0.001
+    _target_: ${optimizer}
 
   loss:
-    _target_: torch.nn.MSELoss
+    _target_: ${loss}

@@ -1,8 +1,4 @@
-# Ignore Hydra output logs
-thesis/outputs/
+# ignore these files
 **/*.log
 
-
-# Ignore Hydra output logs
-thesis/outputs/
-**/*.log
+outputs/

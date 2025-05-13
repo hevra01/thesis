@@ -2,14 +2,13 @@ train:
   _target_: data.datasets.HuggingFaceDataset
 
   dataset:
+    # similar to datasets.load_dataset(path="mnist", split="train", trust_remote_code=True)
     _target_: datasets.load_dataset
     path: mnist # Huggingface dataset from https://huggingface.co/datasets
     split: train
     trust_remote_code: True
 
-  transform:
-    _target_: torchvision.transforms.Compose
-    transforms: ${_all_data_transforms}
+  transform: null # Leave this blank to inject later. this will be experiment specific.
 
 
 val:
@@ -21,7 +20,5 @@ val:
     split: test
     trust_remote_code: True
 
-  transform:
-    _target_: torchvision.transforms.Compose
-    transforms: ${_all_data_transforms}
+  transform: null # Leave this blank to inject later. this will be experiment specific.
 

@@ -1,0 +1,26 @@
+defaults:
+# The reason you can inject fields like transform into the dataset config from your experiment yaml is because of the override keyword.
+  - override /dataset: MNIST
+  - override /model: MLPUnet
+
+dataset:
+# in MNIST.yaml, the transform wasn't defined because it is experiment specific. 
+# so we rather define it here.
+  train:
+    transform:
+      _target_: torchvision.transforms.Compose
+      transforms:
+        - _target_: torchvision.transforms.ToTensor
+        - _target_: torchvision.transforms.Normalize
+          mean: [0.5]
+          std: [0.5]
+
+optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.001
+
+loss:
+  _target_: torch.nn.MSELoss
+
+batch_size: 64
+max_epochs: 1000
