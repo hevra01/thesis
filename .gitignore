@@ -1,0 +1,8 @@
+# Ignore Hydra output logs
+thesis/outputs/
+**/*.log
+
+
+# Ignore Hydra output logs
+thesis/outputs/
+**/*.log
