@@ -12,18 +12,18 @@ train:
 
   loader: 
     _target_: torch.utils.data.DataLoader
-    dataset: ${dataset.train}
-    batch_size: ${batch_size}
+    dataset: ${experiment.dataset.train}
+    batch_size: ${experiment.batch_size}
     shuffle: True
     num_workers: 40
 
   trainer: 
-    max_epochs: ${max_epochs}
+    max_epochs: ${experiment.max_epochs}
 
   ckpt_path: null
 
   optimizer:
-    _target_: ${optimizer}
+    _target_: ${experiment.optimizer}
 
   loss:
-    _target_: ${loss}
+    _target_: ${experiment.loss}

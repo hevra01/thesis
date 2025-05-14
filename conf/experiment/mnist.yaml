@@ -1,18 +1,19 @@
 defaults:
   - /model: MLPUnet
-  - override/dataset: MNIST
+  - /dataset: MNIST
+  - _self_
 
-dataset:
-# in MNIST.yaml, the transform wasn't defined because it is experiment specific. 
-# so we rather define it here.
-  train:
-    transform:
-      _target_: torchvision.transforms.Compose
-      transforms:
-        - _target_: torchvision.transforms.ToTensor
-        - _target_: torchvision.transforms.Normalize
-          mean: [0.5]
-          std: [0.5]
+# dataset:
+# # in MNIST.yaml, the transform wasn't defined because it is experiment specific. 
+# # so we rather define it here.
+#   train:
+#     transform:
+#       _target_: torchvision.transforms.Compose
+#       transforms:
+#         - _target_: torchvision.transforms.ToTensor
+#         - _target_: torchvision.transforms.Normalize
+#           mean: [0.5]
+#           std: [0.5]
 
 optimizer:
   _target_: torch.optim.Adam

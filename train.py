@@ -3,7 +3,7 @@ import lightning as L
 import torch
 import torchvision.transforms.functional 
 from hydra.utils import instantiate
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from utils.train_utils import train_one_epoch
 
 
@@ -17,6 +17,10 @@ def main(cfg: DictConfig):
         raise RuntimeError("CUDA is not available. Please check your CUDA installation.")
     
     print(f"Using device: {device}")
+
+    # Save final config as JSON
+    with open("final_config.json", "w") as f:
+        f.write(OmegaConf.to_json(cfg))
 
     # Configure dataset
     train_loader = instantiate(cfg.train.loader)
