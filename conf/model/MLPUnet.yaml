@@ -1,4 +1,6 @@
-_target_: thesis.models.mlp.MLPUnet  # Required by Hydra to know which class to instantiate
-data_dim: ${dataset.data_dim}  
+# Required by Hydra to know which class to instantiate
+# the import path is relative to the file which we run (in this case, train.py)
+_target_: models.mlp.MLPUnet  
+data_dim: ${experiment.dataset.data_dim}
 hidden_sizes: [4096, 2048, 1024, 1024, 512, 512]
 time_embedding_dim: 128

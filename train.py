@@ -1,3 +1,4 @@
+import json
 import hydra
 import lightning as L
 import torch
@@ -10,7 +11,7 @@ from utils.train_utils import train_one_epoch
 
 @hydra.main(version_base=None, config_path="conf", config_name="train")
 def main(cfg: DictConfig):
-    print("hev")
+    
     # Set device
     device = torch.device(cfg.train.device)
     if device.type == "cuda" and not torch.cuda.is_available():
@@ -20,22 +21,21 @@ def main(cfg: DictConfig):
 
     # Save final config as JSON
     with open("final_config.json", "w") as f:
-        f.write(OmegaConf.to_json(cfg))
+        json.dump(OmegaConf.to_container(cfg, resolve=True), f, indent=2)
 
-    # Configure dataset
+    # Configure torch dataloader
     train_loader = instantiate(cfg.train.loader)
-    print(train_loader)
 
     # Configure model
-    model = instantiate(cfg.train.model).to(device)  # instantiate the model
+    model = instantiate(cfg.experiment.model).to(device)  # instantiate the model
     print(model)
 
     # Configure optimizer and loss function
-    optimizer = instantiate(cfg.train.optimizer, params=model.parameters())
-    criterion = instantiate(cfg.train.loss)
+    optimizer = instantiate(cfg.experiment.optimizer, params=model.parameters())
+    criterion = instantiate(cfg.experiment.loss)
 
     # start training
-    for epoch in range(cfg.train.max_epochs):
+    for epoch in range(cfg.experiment.max_epochs):
         avg_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
         print(f"Epoch {epoch}: train_loss = {avg_loss:.4f}")
 

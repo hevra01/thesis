@@ -1,0 +1,116 @@
+{
+  "experiment": {
+    "model": {
+      "_target_": "models.mlp.MLPUnet",
+      "data_dim": 784,
+      "hidden_sizes": [
+        4096,
+        2048,
+        1024,
+        1024,
+        512,
+        512
+      ],
+      "time_embedding_dim": 128
+    },
+    "dataset": {
+      "train": {
+        "_target_": "data.datasets.huggingface_dataset.HuggingFaceDataset",
+        "dataset": {
+          "_target_": "datasets.load_dataset",
+          "path": "mnist",
+          "split": "train",
+          "trust_remote_code": true
+        },
+        "transform": {
+          "_target_": "torchvision.transforms.Compose",
+          "transforms": [
+            {
+              "_target_": "torchvision.transforms.ToTensor"
+            },
+            {
+              "_target_": "torchvision.transforms.Normalize",
+              "mean": [
+                0.5
+              ],
+              "std": [
+                0.5
+              ]
+            }
+          ]
+        }
+      },
+      "val": {
+        "_target_": "data.datasets.huggingface_dataset.HuggingFaceDataset",
+        "dataset": {
+          "_target_": "datasets.load_dataset",
+          "path": "mnist",
+          "split": "test",
+          "trust_remote_code": true
+        },
+        "transform": null
+      },
+      "data_dim": 784
+    },
+    "optimizer": {
+      "_target_": "torch.optim.Adam",
+      "lr": 0.001
+    },
+    "loss": {
+      "_target_": "torch.nn.MSELoss"
+    },
+    "batch_size": 64,
+    "max_epochs": 1000
+  },
+  "out_dir": "./outputs",
+  "train": {
+    "device": "cuda",
+    "loader": {
+      "_target_": "torch.utils.data.DataLoader",
+      "dataset": {
+        "_target_": "data.datasets.huggingface_dataset.HuggingFaceDataset",
+        "dataset": {
+          "_target_": "datasets.load_dataset",
+          "path": "mnist",
+          "split": "train",
+          "trust_remote_code": true
+        },
+        "transform": {
+          "_target_": "torchvision.transforms.Compose",
+          "transforms": [
+            {
+              "_target_": "torchvision.transforms.ToTensor"
+            },
+            {
+              "_target_": "torchvision.transforms.Normalize",
+              "mean": [
+                0.5
+              ],
+              "std": [
+                0.5
+              ]
+            }
+          ]
+        }
+      },
+      "batch_size": 64,
+      "shuffle": true,
+      "num_workers": 40
+    },
+    "trainer": {
+      "max_epochs": 1000
+    },
+    "ckpt_path": null,
+    "optimizer": {
+      "_target_": {
+        "_target_": "torch.optim.Adam",
+        "lr": 0.001
+      }
+    },
+    "loss": {
+      "_target_": {
+        "_target_": "torch.nn.MSELoss"
+      }
+    }
+  }
+}
