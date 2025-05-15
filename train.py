@@ -6,6 +6,7 @@ import torchvision.transforms.functional
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from utils.train_utils import train_one_epoch
+from training.score_matching_trainer import ScoreMatchingTrainer
 
 
 
@@ -30,14 +31,24 @@ def main(cfg: DictConfig):
     model = instantiate(cfg.experiment.model).to(device)  # instantiate the model
     print(model)
 
+    # Configure the SDE
+    sde = instantiate(cfg.experiment.sde, model=model).to(device)
+
     # Configure optimizer and loss function
     optimizer = instantiate(cfg.experiment.optimizer, params=model.parameters())
     criterion = instantiate(cfg.experiment.loss)
 
+    trainer = ScoreMatchingTrainer(
+        sde=sde,
+        optimizer=optimizer,
+        criterion=criterion,
+        device=device
+    )
+
     # start training
     for epoch in range(cfg.experiment.max_epochs):
-        avg_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-        print(f"Epoch {epoch}: train_loss = {avg_loss:.4f}")
+        loss = trainer.train_step(train_loader)
+        print(f"Epoch {epoch}: train_loss = {loss:.4f}")
 
 if __name__ == "__main__":
 

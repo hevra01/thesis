@@ -1,0 +1,6 @@
+_target_: sde.sdes.VpSDE  
+score_net: ${experiment.model}
+beta_min: 0.1
+beta_max: 20
+t_max: 1.0
+

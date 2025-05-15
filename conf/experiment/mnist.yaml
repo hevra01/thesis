@@ -1,6 +1,7 @@
 defaults:
   - /model: MLPUnet
   - /dataset: MNIST
+  - /sde: VpSDE
   - _self_
 
 dataset:
