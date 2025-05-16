@@ -170,13 +170,15 @@ class VpSDE(SDE):
         This helps with computing the closed form solution of the forward SDE.
         You use the sigma() function whenever you want to simulate the forward SDE in closed form,
         i.e. not step by step in a numeric way.
+        This corresponds to the diffusion coefficient in the integrated form of the SDE: xt = μ*x0 + σϵ
         """
         return torch.sqrt(1.0 - torch.exp(-self.beta_integral(t_start, t_end)))
     
     def mu_scale(self, t_end, t_start=0.0):
         """Scaling factor for the mean of x(t_end) | x(t_start).
 
-        The mean should equal mu_scale(t_end, t_start) * x(t_start)
+        The mean should equal mu_scale(t_end, t_start) * x(t_start).
+        this is the drift term in the integrated form of the SDE: xt = μ*x0 + σϵ
         """
         return torch.exp(-self.beta_integral(t_start, t_end) / 2)
     
@@ -191,7 +193,12 @@ class VpSDE(SDE):
         return t_start, t_end
     
     def solve_forward_sde(self, x_start, t_end=1.0, t_start=0.0, return_eps=False):
-        """Solve the SDE forward from time t_start to t_end"""
+        """
+        Solve the SDE forward from time t_start to t_end.
+            Forward SDE:
+            x_t = mu(t) * x_0 + sigma(t) * eps
+        """
+
         t_start, t_end = self._match_timestep_shapes(t_start, t_end)
         t_start, t_end = t_start.to(x_start.device), t_end.to(x_start.device)
         assert torch.all(t_start <= t_end)
@@ -205,6 +212,8 @@ class VpSDE(SDE):
             mu_scale = mu_scale.reshape(x_start.shape[:1] + (1,) * new_dims)
             sigma_end = sigma_end.reshape(x_start.shape[:1] + (1,) * new_dims)
 
+        # The forward SDE is given by:
+        # x_t = mu(t) * x_0 + sigma(t) * eps
         x_end = mu_scale * x_start + sigma_end * eps
 
         if return_eps:  # epsilon, the random noise value, may be needed for training
