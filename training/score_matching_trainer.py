@@ -10,24 +10,23 @@ class ScoreMatchingTrainer:
         self.criterion = criterion
         self.device = device
 
-    def train_step(self, x):
+    def train_step(self, batch):
         """
         Performs a single training step on a batch.
 
         Args:
-            x (torch.Tensor): A batch of input data
+            batch (dict): A batch of input data
 
         Returns:
             float: The loss value for this batch
         """
-        x = x.to(self.device)
-        self.model.train()
 
         # Sample random timesteps for each example
-        t = torch.rand((x.size(0),), device=self.device)
+        t = torch.rand((batch.size(0),), device=self.device)
+        
 
         # Add noise using forward SDE and get the target noise
-        x_noisy, eps = self.sde.solve_forward_sde(x, t, return_eps=True)
+        x_noisy, eps = self.sde.solve_forward_sde(batch, t, return_eps=True)
 
         # Predict the noise using the model
         pred_score = self.model(x_noisy, t)
@@ -52,19 +51,17 @@ class ScoreMatchingTrainer:
         Returns:
             float: Average loss over the epoch
         """
+        self.model.train()  # Set model to training mode once per epoch
         total_loss = 0.0
         total_batches = 0
-        self.model.train()  # Set model to training mode once per epoch
 
+        # batch[0] is the data, batch[1] is the label
         for batch in dataloader:
-            print(batch.keys())
-            exit()
-            # Unpack batch if it’s a (data, label) pair
-            if isinstance(batch, (tuple, list)):
-                batch = batch[0]
+            print(batch["image"][0])
+            print(batch["image"][0].shape)
 
             # Call the per-batch training step
-            loss = self.train_step(batch)
+            loss = self.train_step(batch["image"])
 
             total_loss += loss
             total_batches += 1

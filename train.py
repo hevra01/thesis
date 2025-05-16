@@ -5,11 +5,7 @@ import torch
 import torchvision.transforms.functional 
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from utils.train_utils import train_one_epoch
 from training.score_matching_trainer import ScoreMatchingTrainer
-from sde.sdes import VpSDE
-
-
 
 @hydra.main(version_base=None, config_path="conf", config_name="train")
 def main(cfg: DictConfig):
@@ -49,7 +45,7 @@ def main(cfg: DictConfig):
 
     # start training
     for epoch in range(cfg.experiment.max_epochs):
-        loss = trainer.train_step(train_loader)
+        loss = trainer.train_epoch(train_loader)
         print(f"Epoch {epoch}: train_loss = {loss:.4f}")
 
 if __name__ == "__main__":

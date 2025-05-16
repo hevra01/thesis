@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 from abc import ABC, abstractmethod
-from utils import batch_linspace, copy_tensor_or_create
+from .utils import batch_linspace, copy_tensor_or_create
 
 class SDE(ABC, nn.Module):
     """
@@ -179,6 +179,16 @@ class VpSDE(SDE):
         The mean should equal mu_scale(t_end, t_start) * x(t_start)
         """
         return torch.exp(-self.beta_integral(t_start, t_end) / 2)
+    
+    @staticmethod
+    def _match_timestep_shapes(t_start, t_end):
+        t_start = copy_tensor_or_create(t_start)
+        t_end = copy_tensor_or_create(t_end)
+        if t_start.ndim > t_end.ndim:
+            t_end = torch.full_like(t_start, fill_value=t_end)
+        elif t_start.ndim < t_end.ndim:
+            t_start = torch.full_like(t_end, fill_value=t_start)
+        return t_start, t_end
     
     def solve_forward_sde(self, x_start, t_end=1.0, t_start=0.0, return_eps=False):
         """Solve the SDE forward from time t_start to t_end"""
