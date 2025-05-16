@@ -7,6 +7,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from utils.train_utils import train_one_epoch
 from training.score_matching_trainer import ScoreMatchingTrainer
+from sde.sdes import VpSDE
 
 
 
@@ -32,11 +33,12 @@ def main(cfg: DictConfig):
     print(model)
 
     # Configure the SDE
-    sde = instantiate(cfg.experiment.sde, model=model).to(device)
+    sde = instantiate(cfg.experiment.sde).to(device)
 
     # Configure optimizer and loss function
     optimizer = instantiate(cfg.experiment.optimizer, params=model.parameters())
     criterion = instantiate(cfg.experiment.loss)
+
 
     trainer = ScoreMatchingTrainer(
         sde=sde,

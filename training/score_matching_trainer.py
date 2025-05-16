@@ -57,6 +57,8 @@ class ScoreMatchingTrainer:
         self.model.train()  # Set model to training mode once per epoch
 
         for batch in dataloader:
+            print(batch.keys())
+            exit()
             # Unpack batch if it’s a (data, label) pair
             if isinstance(batch, (tuple, list)):
                 batch = batch[0]
