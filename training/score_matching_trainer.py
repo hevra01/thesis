@@ -20,12 +20,12 @@ class ScoreMatchingTrainer:
         Returns:
             float: The loss value for this batch
         """
-
+        clean_images = batch["image"].to(self.device)
         # Sample random timesteps for each example
-        t = torch.rand((batch.size(0),), device=self.device)
+        t = torch.rand((clean_images.size(0),), device=self.device)
         
         # Add noise using forward SDE and get the target noise
-        x_noisy, eps = self.sde.solve_forward_sde(batch, t, return_eps=True)
+        x_noisy, eps = self.sde.solve_forward_sde(clean_images, t, return_eps=True)
 
         # since we are using an MLP as the score net, we need to flatten the input
         x_flat = x_noisy.view(x_noisy.size(0), -1)  
@@ -68,7 +68,7 @@ class ScoreMatchingTrainer:
         for batch in dataloader:
 
             # Call the per-batch training step
-            loss = self.train_step(batch["image"].to(self.device))
+            loss = self.train_step(batch)
 
             total_loss += loss
             total_batches += 1

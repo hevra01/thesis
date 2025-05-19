@@ -10,7 +10,7 @@ defaults:
 
 optimizer:
   _target_: torch.optim.Adam
-  lr: 0.001
+  lr: 0.01
 
 loss:
   _target_: torch.nn.MSELoss
