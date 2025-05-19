@@ -4,6 +4,7 @@ defaults:
   - /sde: VpSDE
   - _self_
 
+# we add the transform here, because in different experiments, we might want to use different transforms.
 dataset:
 # in MNIST.yaml, the transform wasn't defined because it is experiment specific. 
 # so we rather define it here.

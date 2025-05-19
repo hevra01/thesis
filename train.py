@@ -23,7 +23,8 @@ def main(cfg: DictConfig):
 
     # Configure torch dataloader
     train_loader = instantiate(cfg.train.loader)
-
+    print(next(iter(train_loader))["image"][0].shape)  # check if the dataloader works
+    exit()
     # Configure model
     model = instantiate(cfg.experiment.model).to(device)  # instantiate the model
     print(model)
@@ -31,7 +32,7 @@ def main(cfg: DictConfig):
     # Configure the SDE
     sde = instantiate(cfg.experiment.sde).to(device)
 
-    # Configure optimizer and loss function
+    # Configure optimizer and loss function 
     optimizer = instantiate(cfg.experiment.optimizer, params=model.parameters())
     criterion = instantiate(cfg.experiment.loss)
 

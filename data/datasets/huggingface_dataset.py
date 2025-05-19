@@ -68,7 +68,7 @@ class HuggingFaceDataset:
                     image_pils = datarow[img_key]
 
             # Apply preprocessing transform  specified in config to the images
-            image_tensors = [transform(image.convert("RGB")) for image in image_pils]
+            image_tensors = [transform(image) for image in image_pils]
             # Include label if present
             label = datarow.get("label", None)
 

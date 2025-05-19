@@ -60,7 +60,6 @@ class ScoreMatchingTrainer:
 
         # batch[0] is the data, batch[1] is the label
         for batch in dataloader:
-            # print(batch["image"][0].shape)
 
             # Call the per-batch training step
             loss = self.train_step(batch["image"])
