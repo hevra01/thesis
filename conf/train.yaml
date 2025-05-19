@@ -16,6 +16,7 @@ train:
     batch_size: ${experiment.batch_size}
     shuffle: True
     num_workers: 40
+    pin_memory: True
 
   trainer: 
     max_epochs: ${experiment.max_epochs}

@@ -205,7 +205,7 @@ class VpSDE(SDE):
 
         mu_scale = self.mu_scale(t_start=t_start, t_end=t_end)
         sigma_end = self.sigma(t_start=t_start, t_end=t_end)
-        eps = torch.randn_like(x_start)
+        eps = torch.randn_like(x_start) # Same shape and device as x_start
 
         if mu_scale.ndim > 0:  # Add a broadcasting dimensions to the scalars
             new_dims = x_start.ndim - mu_scale.ndim

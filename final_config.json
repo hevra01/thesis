@@ -114,7 +114,8 @@
       },
       "batch_size": 64,
       "shuffle": true,
-      "num_workers": 40
+      "num_workers": 40,
+      "pin_memory": true
     },
     "trainer": {
       "max_epochs": 1000

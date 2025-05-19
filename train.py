@@ -23,8 +23,7 @@ def main(cfg: DictConfig):
 
     # Configure torch dataloader
     train_loader = instantiate(cfg.train.loader)
-    print(next(iter(train_loader))["image"][0].shape)  # check if the dataloader works
-    exit()
+    
     # Configure model
     model = instantiate(cfg.experiment.model).to(device)  # instantiate the model
     print(model)

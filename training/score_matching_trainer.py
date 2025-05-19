@@ -62,7 +62,7 @@ class ScoreMatchingTrainer:
         for batch in dataloader:
 
             # Call the per-batch training step
-            loss = self.train_step(batch["image"])
+            loss = self.train_step(batch["image"].to(self.device))
 
             total_loss += loss
             total_batches += 1
