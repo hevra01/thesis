@@ -13,6 +13,16 @@
       ],
       "time_embedding_dim": 128
     },
+    "all_data_transforms": {
+      "t0": {
+        "_target_": "torchvision.transforms.ToTensor"
+      },
+      "t1": {
+        "_target_": "torchvision.transforms.Normalize",
+        "mean": 0.1307,
+        "std": 0.3081
+      }
+    },
     "dataset": {
       "train": {
         "_target_": "data.datasets.huggingface_dataset.HuggingFaceDataset",
@@ -30,12 +40,8 @@
             },
             {
               "_target_": "torchvision.transforms.Normalize",
-              "mean": [
-                0.5
-              ],
-              "std": [
-                0.5
-              ]
+              "mean": 0.1307,
+              "std": 0.3081
             }
           ]
         }
@@ -48,9 +54,23 @@
           "split": "test",
           "trust_remote_code": true
         },
-        "transform": null
+        "transform": {
+          "_target_": "torchvision.transforms.Compose",
+          "transforms": [
+            {
+              "_target_": "torchvision.transforms.ToTensor"
+            },
+            {
+              "_target_": "torchvision.transforms.Normalize",
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          ]
+        }
       },
-      "data_dim": 784
+      "data_dim": 784,
+      "mean": 0.1307,
+      "std": 0.3081
     },
     "sde": {
       "_target_": "sde.sdes.VpSDE",
@@ -106,12 +126,8 @@
             },
             {
               "_target_": "torchvision.transforms.Normalize",
-              "mean": [
-                0.5
-              ],
-              "std": [
-                0.5
-              ]
+              "mean": 0.1307,
+              "std": 0.3081
             }
           ]
         }
@@ -140,7 +156,7 @@
   "wandb": {
     "enable": false,
     "project": "thesis_hev",
-    "run_name": "mnist_2025-05-19_13-06-41",
+    "run_name": "mnist_2025-05-19_16-59-23",
     "mode": "online"
   }
 }

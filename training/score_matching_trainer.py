@@ -42,18 +42,10 @@ class ScoreMatchingTrainer:
         # So we need to take the negative of the noise.
         loss = self.criterion(pred_score, -eps_flat)
 
-        print(f"pred_score: {pred_score.shape}, eps_flat: {eps_flat.shape}")
-        print(f"pred_score: {pred_score}, eps_flat: {eps_flat}")
-        print(f"loss: {loss}")
-        
-
         # Backpropagation
         self.optimizer.zero_grad()
         loss.backward()
-        for name, param in self.model.named_parameters():
-            if param.grad is not None:
-                print(f"{name} grad norm: {param.grad.norm().item()}")
-        exit()
+        
         self.optimizer.step()
 
         return loss.item()

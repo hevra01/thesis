@@ -25,7 +25,9 @@ train:
     split: train
     trust_remote_code: True
 
-  transform: null # Leave this blank to inject later. this will be experiment specific.
+  transform:
+    _target_: torchvision.transforms.Compose
+    transforms: ${oc.dict.values:experiment.all_data_transforms}
 
 
 val:
@@ -37,7 +39,9 @@ val:
     split: test
     trust_remote_code: True
 
-  transform: null # Leave this blank to inject later. this will be experiment specific.
+  transform:
+    _target_: torchvision.transforms.Compose
+    transforms: ${oc.dict.values:experiment.all_data_transforms} 
 
 data_dim: 784
 mean: 0.1307
