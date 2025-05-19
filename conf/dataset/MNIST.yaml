@@ -40,3 +40,5 @@ val:
   transform: null # Leave this blank to inject later. this will be experiment specific.
 
 data_dim: 784
+mean: 0.1307
+std: 0.3081

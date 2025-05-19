@@ -5,7 +5,7 @@
 outputs/
 
 # ignore wandb
-wandb
+wandb/
 
 # Ignore Python bytecode
 __pycache__/

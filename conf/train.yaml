@@ -31,7 +31,8 @@ train:
 
 
 wandb:
-  enable: true
+  # If you want to use wandb, set this to true.
+  enable: false
   project: "thesis_hev"
   run_name: "${experiment.experiment_name}_${now:%Y-%m-%d_%H-%M-%S}"
   mode: online  # or "offline" if no internet

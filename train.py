@@ -60,6 +60,11 @@ def main(cfg: DictConfig):
     # Path to checkpoint file. This will help if we want to resume training from a checkpoint.
     ckpt_path = ckpt_dir / "latest.pt"
 
+    # start_epoch is used to keep track of the current epoch.
+    # If we are resuming training from a checkpoint, we will set this to the epoch of the checkpoint.
+    # If we are not resuming training, we will set this to 0.
+    start_epoch = 0
+
     # Try loading existing checkpoint
     if ckpt_path.exists():
         checkpoint = torch.load(ckpt_path, map_location=device)

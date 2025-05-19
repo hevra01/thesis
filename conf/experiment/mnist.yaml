@@ -2,6 +2,8 @@ defaults:
   - /model: MLPUnet
   - /dataset: MNIST
   - /sde: VpSDE
+  - /data_transforms@transforms.t0: to_tensor
+  - /data_transforms@transforms.t1: zero_center_normalize
   - _self_
 
 # we add the transform here, because in different experiments, we might want to use different transforms.
@@ -12,10 +14,8 @@ dataset:
     transform:
       _target_: torchvision.transforms.Compose
       transforms:
-        - _target_: torchvision.transforms.ToTensor
-        - _target_: torchvision.transforms.Normalize
-          mean: [0.5]
-          std: [0.5]
+      - ${transforms.t0}
+      - ${transforms.t1}
 
 optimizer:
   _target_: torch.optim.Adam
