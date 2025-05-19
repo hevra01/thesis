@@ -25,4 +25,11 @@ loss:
   _target_: torch.nn.MSELoss
 
 batch_size: 64
-max_epochs: 10
+max_epochs: 200
+
+experiment_name: mnist
+
+checkpoint:
+  dir: ${hydra:run.dir}/checkpoints
+
+

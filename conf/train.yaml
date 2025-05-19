@@ -28,3 +28,10 @@ train:
 
   loss:
     _target_: ${experiment.loss}
+
+
+wandb:
+  enable: true
+  project: "thesis_hev"
+  run_name: "${experiment.experiment_name}_${now:%Y-%m-%d_%H-%M-%S}"
+  mode: online  # or "offline" if no internet

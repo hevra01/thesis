@@ -1,8 +1,9 @@
 # where to keep the logs
 run:
-  dir: ${out_dir}/hydra/${now:%Y-%m-%d}/${now:%H\:%M\:%S}
+  # If you want just one folder per experiment name.
+  dir: ${out_dir}/hydra/${experiment.experiment_name}
 
 #  Sweep to Tune a Hyperparameter
 sweep:
-  dir: ${out_dir}/hydra/${now:%Y-%m-%d}/${now:%H\:%M\:%S}-sweep
+  dir: ${out_dir}/hydra/${experiment.experiment_name}-sweep
   subdir: ${hydra.job.override_dirname}

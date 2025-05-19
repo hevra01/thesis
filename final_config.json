@@ -79,7 +79,11 @@
       "_target_": "torch.nn.MSELoss"
     },
     "batch_size": 64,
-    "max_epochs": 10
+    "max_epochs": 10,
+    "experiment_name": "mnist",
+    "checkpoint": {
+      "dir": "./outputs/hydra/mnist/checkpoints"
+    }
   },
   "out_dir": "./outputs",
   "train": {
@@ -132,5 +136,11 @@
         "_target_": "torch.nn.MSELoss"
       }
     }
+  },
+  "wandb": {
+    "enable": true,
+    "project": "thesis_hev",
+    "run_name": "mnist_2025-05-19_12-30-28",
+    "mode": "online"
   }
 }
