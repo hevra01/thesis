@@ -111,7 +111,6 @@ class MLPUnet(nn.Module):
         # note that we will keep track of the embeddings for each layer
         # because we will need them for the upsampling layers where we will need 
         # them for concatenation.
-        print(f"timestep embedding shape: {t.shape}", x.shape)
         embeddings = [torch.cat([x, t], dim=-1)]
 
         # start forwarding through the layers

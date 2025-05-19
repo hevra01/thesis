@@ -25,4 +25,4 @@ loss:
   _target_: torch.nn.MSELoss
 
 batch_size: 64
-max_epochs: 1000
+max_epochs: 10

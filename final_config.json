@@ -79,7 +79,7 @@
       "_target_": "torch.nn.MSELoss"
     },
     "batch_size": 64,
-    "max_epochs": 1000
+    "max_epochs": 10
   },
   "out_dir": "./outputs",
   "train": {
@@ -118,7 +118,7 @@
       "pin_memory": true
     },
     "trainer": {
-      "max_epochs": 1000
+      "max_epochs": 10
     },
     "ckpt_path": null,
     "optimizer": {

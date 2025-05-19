@@ -30,12 +30,13 @@ class ScoreMatchingTrainer:
 
         # since we are using an MLP as the score net, we need to flatten the input
         x_flat = x_noisy.view(x_noisy.size(0), -1)  
+        eps_flat = eps.view(eps.size(0), -1)
 
         # Predict the noise using the model
         pred_score = self.model(x_flat, t)
 
         # Compute loss between predicted and true noise
-        loss = self.criterion(pred_score, eps)
+        loss = self.criterion(pred_score, eps_flat)
 
         # Backpropagation
         self.optimizer.zero_grad()
