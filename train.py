@@ -38,10 +38,10 @@ def main(cfg: DictConfig):
     model = instantiate(cfg.experiment.model).to(device)  # instantiate the model
 
     # Configure the SDE
-    sde = instantiate(cfg.experiment.sde).to(device)
+    sde = instantiate(cfg.experiment.sde, score_net=model).to(device)
 
-    # Configure optimizer and loss function 
-    optimizer = instantiate(cfg.experiment.optimizer, params=model.parameters())
+    # Configure optimizer and loss function
+    optimizer = instantiate(cfg.experiment.optimizer, params=sde.score_net.parameters())
     criterion = instantiate(cfg.experiment.loss)
 
 
@@ -68,9 +68,8 @@ def main(cfg: DictConfig):
     # Try loading existing checkpoint
     if ckpt_path.exists():
         checkpoint = torch.load(ckpt_path, map_location=device)
-        
         # Load model weights
-        model.load_state_dict(checkpoint["model"])
+        sde.score_net.load_state_dict(checkpoint["model"])
 
         # Load epoch
         start_epoch = checkpoint.get("epoch", 0) + 1
@@ -86,7 +85,7 @@ def main(cfg: DictConfig):
          # Save checkpoint
         torch.save(
             {
-                "model": model.state_dict(),
+                "model": sde.score_net.state_dict(),
                 "optimizer": getattr(trainer, "optimizer", None).state_dict() if hasattr(trainer, "optimizer") else None,
                 "epoch": epoch,
             },

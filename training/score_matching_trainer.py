@@ -20,21 +20,26 @@ class ScoreMatchingTrainer:
         Returns:
             float: The loss value for this batch
         """
+
+        # we are only using the images for training, the model is learning to predict the noise. 
+        # Has nothing to do with the labels.
         clean_images = batch["image"].to(self.device)
+
         # Sample random timesteps for each example
         t = torch.rand((clean_images.size(0),), device=self.device)
         
         # Add noise using forward SDE and get the target noise
-        x_noisy, eps = self.sde.solve_forward_sde(clean_images, t, return_eps=True)
+        noisy_images, eps = self.sde.solve_forward_sde(clean_images, t, return_eps=True)
 
         # since we are using an MLP as the score net, we need to flatten the input
-        x_flat = x_noisy.view(x_noisy.size(0), -1)  
+        noisy_images_flat = noisy_images.view(noisy_images.size(0), -1)
         eps_flat = eps.view(eps.size(0), -1)
 
-        # Predict the noise using the model.
-        pred_score = self.model(x_flat, t)
 
-        # Compute loss between predicted and true noise.
+        # Predict the noise using the model.
+        pred_score = self.model(noisy_images_flat, t)
+
+        # Compute loss between predicted and true noise
         # remember that the model predicts the non-scaled noise.
         # so when we compute the loss, we compare it to also the epsilon noise and not the 
         # sigma(t) * eps. also, the model predicts the noise that needs to be removed 
@@ -42,12 +47,15 @@ class ScoreMatchingTrainer:
         # So we need to take the negative of the noise.
         loss = self.criterion(pred_score, -eps_flat)
 
-        # Backpropagation
+        # Clear old gradients
         self.optimizer.zero_grad()
-        loss.backward()
-        
-        self.optimizer.step()
 
+        # Compute gradients
+        loss.backward()
+
+        # Update parameters
+        self.optimizer.step()
+    
         return loss.item()
     
     def train_epoch(self, dataloader):

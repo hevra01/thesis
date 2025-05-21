@@ -111,7 +111,12 @@ class MLPUnet(nn.Module):
         # note that we will keep track of the embeddings for each layer
         # because we will need them for the upsampling layers where we will need 
         # them for concatenation.
-        embeddings = [torch.cat([x, t], dim=-1)]
+        embeddings = []
+        # the first layer is the input layer, which takes the data_dim and time_embedding_dim as input.
+        # we need to concatenate the data and the timestep embedding.
+        first_embedding = torch.cat([x, t], dim=-1)
+        embeddings.append(first_embedding)
+
 
         # start forwarding through the layers
         for i, layer in enumerate(self.layers):
@@ -130,7 +135,7 @@ class MLPUnet(nn.Module):
                 interim = self.activation(interim)
 
             embeddings.append(interim)
-
+        
         # remember that we were storing all the embeddings, so we only need to return the last one
         return embeddings[-1]
 
