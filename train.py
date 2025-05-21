@@ -5,7 +5,7 @@ import lightning as L
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from training.score_matching_trainer import ScoreMatchingTrainer
+from diffusion.diffusion import Diffusion
 import wandb
 
 @hydra.main(version_base=None, config_path="conf", config_name="train")
@@ -46,7 +46,7 @@ def main(cfg: DictConfig):
 
 
     # Set the trainer
-    trainer = ScoreMatchingTrainer(
+    trainer = Diffusion(
         sde=sde,
         optimizer=optimizer,
         criterion=criterion,

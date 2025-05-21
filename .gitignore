@@ -7,6 +7,12 @@ outputs/
 # ignore wandb
 wandb/
 
+# ignore logs
+logs/
+
+# ignore cluster related files
+cluster_related/
+
 # Ignore Python bytecode
 __pycache__/
 

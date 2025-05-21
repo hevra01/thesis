@@ -1,7 +1,7 @@
 import torch
 
 
-class ScoreMatchingTrainer:
+class Diffusion:
     def __init__(self, sde, optimizer, criterion, device='cuda'):
         self.sde = sde
         # for convenience: since the score net is already in the sde

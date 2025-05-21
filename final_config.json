@@ -156,7 +156,7 @@
   "wandb": {
     "enable": false,
     "project": "thesis_hev",
-    "run_name": "mnist_2025-05-21_10-01-33",
+    "run_name": "mnist_2025-05-21_12-36-29",
     "mode": "online"
   }
 }
