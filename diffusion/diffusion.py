@@ -2,13 +2,14 @@ import torch
 
 
 class Diffusion:
-    def __init__(self, sde, optimizer, criterion, device='cuda'):
+    def __init__(self, sde, optimizer, criterion, sampling_transform=None, device='cuda'):
         self.sde = sde
         # for convenience: since the score net is already in the sde
         self.model = sde.score_net  
         self.optimizer = optimizer
         self.criterion = criterion
         self.device = device
+        self.sampling_transform = sampling_transform
 
     def train_step(self, batch):
         """
@@ -83,3 +84,54 @@ class Diffusion:
 
         return total_loss / total_batches
 
+    def sample(self, num, batch_size=128, timesteps=1000, sample_shape=None, stochastic=True, sampling_transform=True):
+        """
+        The sample function generates synthetic data samples by solving the reverse diffusion process. 
+        It starts with random noise and iteratively refines it using the reverse stochastic differential 
+        equation (SDE) or reverse ordinary differential equation (ODE), depending on the stochastic argument.
+
+        Args:
+            num (int): The number of samples to generate. The function will keep generating samples in batches until this number is reached.
+            batch_size (int): The batch size for sampling
+            timesteps (int): The number of timesteps for the reverse diffusion process.
+            sample_shape (tuple): The shape of the samples to generate. e.g. for mnist, (1, 28, 28).
+            stochastic (bool): Whether to use stochastic sampling or not: solve_reverse_sde or solve_reverse_ode.
+            sampling_transform (bool): Determines whether to apply the optional sampling_transform to the generated samples.
+
+        Returns:
+            torch.Tensor: The generated samples
+        """
+
+        # this list will store the generated samples
+        samples = []
+
+        # Set the model to evaluation mode
+        self.model.eval() 
+
+        # Disable gradient computation
+        with torch.no_grad():  
+            # len(samples) represents the number of batches, not the total number of samples generated so far.
+            while len(samples) * batch_size < num:
+                # this is to safely handle the last batch
+                iter_batch_size = min(batch_size, num - batch_size * len(samples))
+
+                if sample_shape is not None:
+                    noise_shape = (iter_batch_size,) + sample_shape
+                else:
+                    noise_shape = (iter_batch_size,)
+
+                # mapping from the gaussian noise to target distribution. 
+                noise = torch.randn(noise_shape).to(self.device)
+
+                # Solve the reverse diffusion process
+                if stochastic:
+                    sample = self.sde.solve_reverse_sde(noise, steps=timesteps)
+                else:
+                    sample = self.sde.solve_reverse_ode(noise, steps=timesteps)
+                samples.append(sample.cpu())
+
+        samples = torch.cat(samples)
+        # apply the optional sampling transform if it is provided
+        if self.sampling_transform is not None and sampling_transform:
+            samples = self.sampling_transform(samples)
+        return samples
