@@ -46,3 +46,6 @@ val:
 data_dim: 784
 mean: 0.1307
 std: 0.3081
+
+inverse_mean: -0.4242 # -mean/std
+inverse_std: 3.2457 # 1/std

@@ -98,6 +98,38 @@ class SDE(ABC, nn.Module):
 
             x += dx
         return x
+    
+    def score(self, x, t, **score_kwargs):
+        """
+        The score s(x, t) of the forward SDE at time t,
+        the output of the model is used directly, otherwise, the output is normalized by the standard deviation of the score.
+        """
+
+        sigma_t = self.sigma(t).to(x.device)
+
+        t = copy_tensor_or_create(t, device=x.device)
+
+        if t.ndim == 0:
+            t = t.expand(x.shape[0])  # t should be batched for the score_net
+        else:
+            new_dims = x.ndim - sigma_t.ndim  # Expand sigma_t for broadcasting
+            sigma_t = sigma_t.reshape(x.shape[:1] + (1,) * new_dims)
+
+        # Compute score
+        score_sigma_t = self.score_net(x, t, **score_kwargs)
+        return score_sigma_t / sigma_t
+    
+    def solve_reverse_sde(self, x_start, t_start=1.0, t_end=1e-4, steps=1000, **score_kwargs):
+        t_start, t_end = self._match_timestep_shapes(t_start, t_end)
+        assert torch.all(t_start >= t_end)
+
+        return self._solve(x_start, t_start, t_end, steps, stochastic=True, **score_kwargs)
+
+    def solve_reverse_ode(self, x_start, t_start=1.0, t_end=1e-4, steps=1000, **score_kwargs):
+        t_start, t_end = self._match_timestep_shapes(t_start, t_end)
+        assert torch.all(t_start >= t_end)
+
+        return self._solve(x_start, t_start, t_end, steps, stochastic=False, **score_kwargs)
 
 class VpSDE(SDE):
     """The variance-preserving SDE described by Song et al. (2020) in equation (11).
