@@ -2,7 +2,9 @@
 **/*.log
 
 # these are the files from hydra
-output/
+outputs/
+
+output_hev/
 
 # ignore wandb
 wandb/
