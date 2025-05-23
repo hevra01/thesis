@@ -1,9 +1,7 @@
-out_dir: ./outputs # where to keep the logs
-
+out_dir: ./output_hev
 # "defaults" defines which configuration files should be merged together to create the full config tree.
 defaults:
 - experiment: ??? # the value of this key is set in the command line
-- hydra: train
 - _self_
 
 

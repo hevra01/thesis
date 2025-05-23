@@ -4,8 +4,6 @@ defaults:
   - /data_transforms@all_data_transforms.t1: zero_center_normalize
   - /dataset: MNIST
   - /sde: VpSDE
-  # building a dictionary of configurations
-  # Hydra will load: data_transforms/to_tensor.yaml and assign it to the key all_data_transforms.t0
   - _self_
 
 optimizer:
@@ -21,6 +19,6 @@ max_epochs: 200
 experiment_name: mnist
 
 checkpoint:
-  dir: ${hydra:run.dir}/checkpoints
+  dir: ${out_dir}/${experiment.experiment_name}/checkpoints
 
 

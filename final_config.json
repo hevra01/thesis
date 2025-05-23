@@ -104,10 +104,10 @@
     "max_epochs": 200,
     "experiment_name": "mnist",
     "checkpoint": {
-      "dir": "./outputs/hydra/mnist/checkpoints"
+      "dir": "./output_hev/mnist/checkpoints"
     }
   },
-  "out_dir": "./outputs",
+  "out_dir": "./output_hev",
   "train": {
     "device": "cuda",
     "loader": {
@@ -158,7 +158,7 @@
   "wandb": {
     "enable": false,
     "project": "thesis_hev",
-    "run_name": "mnist_2025-05-22_13-44-51",
+    "run_name": "mnist_2025-05-23_12-10-44",
     "mode": "online"
   }
 }

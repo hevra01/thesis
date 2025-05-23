@@ -1,0 +1,28 @@
+defaults:
+  - /model: MLPUnet
+  - /sde: VpSDE
+  - _self_
+
+
+sampling_transforms:
+  _target_: torchvision.transforms.Compose
+  transforms:
+    - _target_: data.utils.transforms.Unflatten
+      shape: [1, 28, 28]
+    - _target_: torchvision.transforms.Normalize
+      mean: -0.4242
+      std: 3.2457
+
+sample_name: mnist
+checkpoint_path: ${out_dir}/${experiment.sample_name}/checkpoints/latest.pt
+
+
+num_samples: 16
+sample_shape: [1, 28, 28]
+timesteps: 1000
+batch_size: 128
+
+data_dim: 784
+
+
+

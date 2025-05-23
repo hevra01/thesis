@@ -122,11 +122,9 @@ class Diffusion:
 
                 # mapping from the gaussian noise to target distribution. 
                 noise = torch.randn(noise_shape).to(self.device)
-                print(noise.shape, "noise shape")
                 # attention: here we are really assuming that we 
                 # are using an mlp hence we are flattening the data.
                 noise_flat = noise.view(noise.size(0), -1)
-                print(noise_flat.shape, "noise flat shape")
                 # Solve the reverse diffusion process
                 if stochastic:
                     sample = self.sde.solve_reverse_sde(x_start=noise_flat, steps=timesteps)
@@ -137,6 +135,5 @@ class Diffusion:
         samples = torch.cat(samples)
         # apply the optional sampling transform if it is provided
         if sampling_transform is not None:
-            print("hex")
             samples = sampling_transform(samples)
         return samples

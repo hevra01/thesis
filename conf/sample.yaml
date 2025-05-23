@@ -1,10 +1,8 @@
-out_dir: ./sample_images # where to keep the logs
-
+out_dir: ./output_hev # where to keep the logs
 device: cuda  # or "cpu"
 
 # "defaults" defines which configuration files should be merged together to create the full config tree.
 defaults:
-- sample: ??? # the value of this key is set in the command line
-- hydra: sample
+- experiment: ??? # the value of this key is set in the command line
 - _self_
 
