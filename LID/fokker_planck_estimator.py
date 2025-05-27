@@ -45,6 +45,9 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
         of the score value wrt its own dimension. E.g. if the first dimension of the score is 0.5, we need to compute the
         derivative of 0.5 wrt x[0].
 
+        For high dimensional data, the laplacian term will be small negative. However, for low dimensional data, the 
+        laplacian term will be large negative. The values are negative because we have converging score vectors close to
+        the manifold. 
         """
 
 
@@ -68,6 +71,10 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
         return laplacian_term
 
     def _get_score_norm_term(self, x, t: float, coeff: float, **score_kwargs):
+        """
+        FIXME: I am not sure how the value of the score norm will change based on high or low dim data.
+        I suspect it is high for low dim and low for high dim data. 
+        """
         if isinstance(t, numbers.Number):
             t = torch.tensor(t).float()
         t: torch.Tensor
@@ -82,6 +89,56 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
 
 class FlipdEstimator(FokkerPlanckEstimator):
     """
-    An LID estimator based on connection between marginal probabilities 
-    and Gaussian Convolution + running the singular value decomposition. 
+    An LID estimator based on the connection made between marginal probabilities
+    and Gaussian convolution + running the singular value decomposition.
+
+    This is the fastest model-based LID estimator available in the library.
+
+    Args:
+        sde: An Sde object containing a trained diffusion model
+        ambient_dim: Corresponds to d in the paper. Inferred by estimate_id if not
+            specified here.
     """
+
+    @torch.no_grad
+    # we use torch.no_grad because we will call the score estimator model 
+    # only for inference.
+    def _estimate_lid(
+        self,
+        x: torch.Tensor, # a point (or batch of points) where LID is to be estimated.
+        t: float | None = None, # the noise level
+        method: (
+            Literal["hutchinson_gaussian", "hutchinson_rademacher", "deterministic"] | None
+        ) = None, # how to compute the Laplacian (trace of score Jacobian)
+        # The number of samples if one opts for estimation methods to save time:
+        # number of random vectors to estimate the trace.
+        hutchinson_sample_count: int = HUTCHINSON_DATA_DIM_THRESHOLD,
+        chunk_size: int = 128,
+        seed: int = 42, # for reproducibility in random sampling.
+        verbose: int = 0,
+        **score_kwargs,
+    ) -> torch.Tensor:
+        x = x.to(self.device)
+        # sigma_t is the standard deviation of noise at time t.
+        t, sigma_t, coeff = self._get_all_math_terms(
+            t=t,
+            sigma_t=None,
+            coeff=None,
+        )
+
+        # First, get the contribution from the laplacian term, which is the trace of the Jacobian of the score.
+        laplacian_term = self._get_laplacian_term(
+            x=x,
+            t=t,
+            coeff=coeff,
+            method=method,
+            hutchinson_sample_count=hutchinson_sample_count,
+            chunk_size=chunk_size,
+            seed=seed,
+            verbose=verbose,
+            **score_kwargs,
+        )
+
+        # Second, get the contribution of the score norm.
+        score_norm_term = self._get_score_norm_term(x=x, t=t, coeff=coeff, **score_kwargs)
+        return self.ambient_dim + sigma_t * laplacian_term + score_norm_term
