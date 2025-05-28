@@ -1,10 +1,11 @@
 import functools
+import math
 import numbers
 from typing import Literal
 import torch
 from model_based_estimator import ModelBasedLIDEstimator
-from sde.sdes import VpSDE
 from sde.utils import compute_trace_of_jacobian, HUTCHINSON_DATA_DIM_THRESHOLD
+from sde.sdes import VpSDE
 
 class FokkerPlanckEstimator(ModelBasedLIDEstimator):
     """
@@ -16,9 +17,28 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
     def __init__(self, ambient_dim: int, model: torch.nn.Module, device: torch.device):
         super().__init__(ambient_dim, model, device)
 
-        assert isinstance(self.model, VpSDE), "The model should be a VpSDE object."
-        self.score_net = self.model
-        self.score_net.eval()  # Ensure the score network is in evaluation mode.
+        assert isinstance(model, VpSDE), "The model should be a VpSDE object."
+        self.model = model
+        self.model.eval()  # Ensure the score network is in evaluation mode.
+
+    def _get_all_math_terms(
+        self,
+        t: float | None = None,
+        sigma_t: float | None = None,
+        coeff: float | None = None,
+    ):
+        """
+        This inner function is a "numerically optimized"
+        way of getting all the math terms that we need from the information
+        that we are given
+        """
+        t = 1e-4 if t is None else t
+        # if B_t is not None, we can compute it from t
+        B_t = self.model.beta_integral(t_start=0, t_end=t).item()
+
+        coeff = math.exp(-0.5 * B_t) if coeff is None else coeff
+        sigma_t = self.model.sigma(t_end=t).item() if sigma_t is None else sigma_t
+        return t, sigma_t, coeff
 
     def _get_laplacian_term(
         self,
@@ -58,7 +78,7 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
                 t = torch.tensor(t).float()
             t: torch.Tensor
             t_repeated = t.repeat(x.shape[0]).to(x.device)
-            return self.score_net(x, t=t_repeated, **score_kwargs)
+            return self.model.score_net(x, t=t_repeated, **score_kwargs)
 
         laplacian_term = compute_trace_of_jacobian(
             fn=functools.partial(score_fn, t=t),
@@ -80,7 +100,7 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
             t = torch.tensor(t).float()
         t: torch.Tensor
         t_repeated = t.repeat(x.shape[0]).to(self.device)
-        scores_flattened = self.score_net(coeff * x, t=t_repeated, **score_kwargs).reshape(
+        scores_flattened = self.model.score_net(coeff * x, t=t_repeated, **score_kwargs).reshape(
             x.shape[0], -1
         )
         score_norm_term = torch.sum(scores_flattened * scores_flattened, dim=1)
@@ -126,7 +146,7 @@ class FlipdEstimator(FokkerPlanckEstimator):
             sigma_t=None,
             coeff=None,
         )
-
+        
         # First, get the contribution from the laplacian term, which is the trace of the Jacobian of the score.
         laplacian_term = self._get_laplacian_term(
             x=x,

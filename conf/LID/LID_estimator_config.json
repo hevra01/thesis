@@ -5,7 +5,7 @@
     "hidden_sizes": [4096, 2048, 1024, 1024, 512, 512],
     "time_embedding_dim": 128
   },
-  "checkpoint_path": "path/to/checkpoint.pt",
+  "checkpoint_path": "output_hev/mnist/checkpoints/latest.pt",
   "device": "cuda",
     "dataset": {
     "name": "mnist",                 

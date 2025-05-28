@@ -1,11 +1,20 @@
+import os
+import sys
+
+# Automatically add the project root to PYTHONPATH
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    print(project_root)
+    sys.path.insert(0, project_root)
+
 import json
 import torch
 from data.utils.dataloaders import get_mnist_dataloader
 from fokker_planck_estimator import FlipdEstimator
 import argparse
+from models.mlp import MLPUnet
 from sde.sdes import VpSDE
 
-from models.mlp import MLPUnet
 
 def estimate_LID(dataloader, model, t, device):
     """
@@ -21,17 +30,13 @@ def estimate_LID(dataloader, model, t, device):
         lid_values: Estimated LID values for the data points.
     """
 
-    lid_estimator = FlipdEstimator(ambient_dim=model.data_dim, model=model, device=device)
+    lid_estimator = FlipdEstimator(ambient_dim=model.score_net.data_dim, model=model, device=device)
 
     lid_values = []
-    print(dataloader)
-    for x in dataloader:
-        print(x, x.shape)
-        exit()
-        x = x.to(device)
-        with torch.no_grad():
-            lid_value = lid_estimator._estimate_lid(x, t=t)
-            lid_values.append(lid_value.cpu())
+    for batch in dataloader:
+        images = batch["image"].to(device)
+        lid_value = lid_estimator._estimate_lid(images, t=t)
+        lid_values.append(lid_value.cpu())
     
     return torch.cat(lid_values)
 
@@ -61,14 +66,21 @@ def main():
     ).to(device)
     score_model.load_state_dict(torch.load(ckpt_path, map_location=device)["model"])
 
+    model = VpSDE(score_net=score_model)
+
     # NOTE: this is a bit hard coded for MNIST, it needs to be more 
     # flexible to work with other datasets.
     # Initialize the dataset
-    dataloader = get_mnist_dataloader()
+    dataloader = get_mnist_dataloader(flatten=True)
 
-    estimate_LID(dataloader, score_model, t, device)
+    LID_values = estimate_LID(dataloader, model, t, device)
 
+    print(LID_values.mean().item())
 
+    # Save the LID values to a file
+    output_path = cfg.get("output_path", "lid_values.pt")
+    torch.save(LID_values, output_path)
+    print(f"LID values saved to {output_path}")
 
 if __name__ == "__main__":
 

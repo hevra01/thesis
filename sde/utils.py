@@ -1,3 +1,4 @@
+import math
 import numbers
 from typing import Callable, Literal
 import torch
@@ -117,6 +118,7 @@ def compute_trace_of_jacobian(
         batch_size = x.shape[0]
         data_shape = x.shape[1:]
         ambient_dim = x.numel() // x.shape[0]
+
         if ambient_dim > HUTCHINSON_DATA_DIM_THRESHOLD:
             method = method or "hutchinson_gaussian"
         else:
