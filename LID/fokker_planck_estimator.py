@@ -163,4 +163,45 @@ class FlipdEstimator(FokkerPlanckEstimator):
         # Second, get the contribution of the score norm.
         score_norm_term = self._get_score_norm_term(x=x, t=t, coeff=coeff, **score_kwargs)
         return self.ambient_dim + sigma_t * laplacian_term + score_norm_term
-
+    
+    
+    def find_lid_for_all_t(
+        self,
+        # this should be a batch of points where LID is to be estimated. could ypu change the below code to reflect that?
+        x: torch.Tensor,
+        t_values: torch.Tensor,
+        method: (
+            Literal["hutchinson_gaussian", "hutchinson_rademacher", "deterministic"] | None
+        ) = None,
+        hutchinson_sample_count: int = HUTCHINSON_DATA_DIM_THRESHOLD,
+        chunk_size: int = 128,
+        seed: int = 42,
+        verbose: int = 0,
+        **score_kwargs,
+    ) -> torch.Tensor:
+        """
+        Estimates the LID for a batch of points at multiple time steps.
+        
+        Args:
+            x: A batch of points where LID is to be estimated.
+            t_values: A tensor of time values at which to estimate LID.
+            method, hutchinson_sample_count, chunk_size, seed, verbose, score_kwargs: Same as in _estimate_lid.
+        
+        Returns:
+            A tensor of LID values for each point at each time step.
+        """
+        lid_values = []
+        for t in t_values:
+            lid_value = self._estimate_lid(
+                x=x, 
+                t=t.item(), 
+                method=method, 
+                hutchinson_sample_count=hutchinson_sample_count, 
+                chunk_size=chunk_size, 
+                seed=seed, 
+                verbose=verbose, 
+                **score_kwargs
+            )
+            lid_values.append(lid_value)
+        
+        return torch.stack(lid_values)
