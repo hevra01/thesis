@@ -17,7 +17,8 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
         super().__init__(ambient_dim, model, device)
 
         assert isinstance(self.model, VpSDE), "The model should be a VpSDE object."
-        self.VpSDE: VpSDE = self.model
+        self.score_net = self.model
+        self.score_net.eval()  # Ensure the score network is in evaluation mode.
 
     def _get_laplacian_term(
         self,
@@ -57,7 +58,7 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
                 t = torch.tensor(t).float()
             t: torch.Tensor
             t_repeated = t.repeat(x.shape[0]).to(x.device)
-            return self.vpsde.score_net(x, t=t_repeated, **score_kwargs)
+            return self.score_net(x, t=t_repeated, **score_kwargs)
 
         laplacian_term = compute_trace_of_jacobian(
             fn=functools.partial(score_fn, t=t),
@@ -79,7 +80,7 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
             t = torch.tensor(t).float()
         t: torch.Tensor
         t_repeated = t.repeat(x.shape[0]).to(self.device)
-        scores_flattened = self.vpsde.score_net(coeff * x, t=t_repeated, **score_kwargs).reshape(
+        scores_flattened = self.score_net(coeff * x, t=t_repeated, **score_kwargs).reshape(
             x.shape[0], -1
         )
         score_norm_term = torch.sum(scores_flattened * scores_flattened, dim=1)
@@ -99,7 +100,7 @@ class FlipdEstimator(FokkerPlanckEstimator):
         ambient_dim: Corresponds to d in the paper. Inferred by estimate_id if not
             specified here.
     """
-
+    
     @torch.no_grad
     # we use torch.no_grad because we will call the score estimator model 
     # only for inference.
@@ -142,3 +143,4 @@ class FlipdEstimator(FokkerPlanckEstimator):
         # Second, get the contribution of the score norm.
         score_norm_term = self._get_score_norm_term(x=x, t=t, coeff=coeff, **score_kwargs)
         return self.ambient_dim + sigma_t * laplacian_term + score_norm_term
+

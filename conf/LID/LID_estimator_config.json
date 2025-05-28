@@ -1,0 +1,21 @@
+{
+  "t": 0.01,
+  "model": {
+    "data_dim": 784,
+    "hidden_sizes": [4096, 2048, 1024, 1024, 512, 512],
+    "time_embedding_dim": 128
+  },
+  "checkpoint_path": "path/to/checkpoint.pt",
+  "device": "cuda",
+    "dataset": {
+    "name": "mnist",                 
+    "batch_size": 64,               
+    "split": "test",                
+    "num_workers": 4,               
+    "shuffle": false,              
+    "transform": null,              
+    "root": "./data",               
+    "subset_size": null,           
+    "class_filter": null            
+  }
+}

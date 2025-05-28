@@ -59,11 +59,12 @@ class MLPUnet(nn.Module):
         # initially the layers are empty
         self.layers = []
         self.time_embedding_dim = time_embedding_dim 
+        self.data_dim = data_dim
 
         # layer_info is a list of tuples, where each tuple contains the size of the layer and the index of the reference layer
         # for the layer. The reference layer is the layer that is concatenated with the current layer.
         # The first layer is the input layer, which takes the data_dim and time_embedding_dim as input.
-        self.layer_info = [(self.time_embedding_dim + data_dim, -1)]
+        self.layer_info = [(self.time_embedding_dim + self.data_dim, -1)]
 
         # initially the layer info contains the downsampling layers
         for size in hidden_sizes:
@@ -83,7 +84,7 @@ class MLPUnet(nn.Module):
 
         # the last layer = input layer dim - time embedding dim = data_dim
         # because we want to find the score ("noise") for each pixel.
-        self.layer_info.append((data_dim, 0))
+        self.layer_info.append((self.data_dim, 0))
 
         for i in range(1, len(self.layer_info)):
             layer_sz, ref_layer_idx = self.layer_info[i]
