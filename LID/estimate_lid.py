@@ -151,7 +151,7 @@ def main():
 
     # Estimate LID over the range of t values for the entire dataset.
     # Then use the knee algorithm to find the best LID estimate.
-    knee_info = estimate_LID_over_t_range_dataloader(lid_estimator, dataloader,
+    knee_info = estimate_LID_over_t_range_dataloader(dataloader, lid_estimator, 
                                                    t_values, 
                                                    ambient_dim=model_cfg["data_dim"],
                                                    device=device, return_info=True)
