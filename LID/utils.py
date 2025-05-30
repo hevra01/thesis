@@ -3,7 +3,7 @@ from typing import Iterable, Tuple
 import numpy as np
 import torch
 from kneed import KneeLocator
-
+import matplotlib.pyplot as plt
 
 def convex_hull(
     x: Iterable,
@@ -151,3 +151,31 @@ def compute_knee(
             "knee_timestep": best_knee,
         }
     return best_knee_y
+
+
+
+
+def plot_lid_curve_with_knee(convex_hull, timesteps, knee_timestep, lid_value, save_path=None):
+    """
+    Visualizes the LID curve (convex hull), timesteps, and the detected knee.
+    
+    Args:
+        convex_hull (np.ndarray): LID values on the convex hull.
+        timesteps (np.ndarray): Corresponding t values.
+        knee_timestep (float): t value where the knee was detected.
+        lid_value (float): LID value at the knee.
+        save_path (str, optional): If provided, saves the plot to this path.
+    """
+    plt.figure(figsize=(8, 5))
+    plt.plot(timesteps, convex_hull, label="LID Convex Hull Curve", color="blue")
+    plt.axvline(x=knee_timestep, color="red", linestyle="--", label=f"Knee t={knee_timestep:.3f}")
+    plt.axhline(y=lid_value, color="green", linestyle=":", label=f"LID={lid_value:.2f}")
+    plt.xlabel("Timestep (t)")
+    plt.ylabel("LID Value")
+    plt.title("LID Curve with Knee Detection")
+    plt.legend()
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path)
+        print(f"Plot saved to {save_path}")
+    plt.show()
