@@ -1,6 +1,8 @@
 from typing import Iterable, Tuple
 
 import numpy as np
+import torch
+from kneed import KneeLocator
 
 
 def convex_hull(
@@ -64,3 +66,88 @@ def convex_hull(
         pnt += 1
 
     return np.array(final_x), np.array(final_y)
+
+def compute_knee(
+    timesteps, # Array of timesteps (t values)
+    lid_curve, # LID values at each timestep
+    ambient_dim, # Original data dimension
+    return_info: bool = False, # Whether to return additional information
+    S: float = 1.0, # Sensitivity parameter for knee detection
+    ignore_timesteps_left: float = 0.05, # Ignore small timesteps
+    ignore_timesteps_right: float = 0.5, # Ignore large timesteps
+):
+    """
+    This algorithm first takes the convex hull of the LID curve (and ignores large values of 't' if given)
+    then this convex hull is given to the Kneedle algorithm to detect a knee:
+    https://github.com/arvkevi/kneed
+
+    Note that using a convex hull is needed because Kneedle assumes that the input curve is convex when
+    it is decreasing.
+
+    In LID calculation context, the knee is the point where the LID starts to drop significantly.
+    So, we start with very low timesteps, where we are very sensitive and hence the noise is considered as a dimension.
+    Then, as we increase the timesteps, we start to ignore the noise and consider only the signal. There
+    is a sweet spot where the timestep is large enough to ignore the noise but small enough to
+    consider the weak signals as dimensions. 
+
+    Args:
+        timesteps:
+            The timesteps that the lid curve is evaluated on and it takes values from 0 to T
+        lid_curve:
+            This is the FLIPD values obtained on each timestep
+        ambient_dim:
+            This is the ambient dimension
+        return_info:
+            when set to True, in addition to the LID estimate, some extra information from
+            the compute_knee algorithm will be logged
+        S:
+            sensitivity of the kneedle
+        ignore_timesteps_threshold:
+            Any timestep above this does not make sense for LID estimation
+    Returns:
+        either a single float value equal to the LID estimate or a dictionary with the following keys:
+        {
+            'lid': the value it should return,
+            'convex_hull': the curve of the convex hull which is passed through
+            'knee_timestep': the timestep at which the knee was detected.
+        }
+    """
+    assert len(timesteps) == len(
+        lid_curve
+    ), f"timesteps and lid_curve should have the same length but got {len(timesteps)} and {len(lid_curve)} respectively."
+
+    # Discard timesteps that are too small or too large.
+    # because in too small timesteps, the noise would be considered
+    # as signal and hence a dimension. Whereas, in too large timesteps,
+    # some weak or medium signals would be considered as noise, hence, they will
+    # not be considered as a dimension.
+    if torch.is_tensor(timesteps):
+        timesteps = timesteps.numpy()
+    if torch.is_tensor(lid_curve):
+        lid_curve = lid_curve.numpy()
+    filtered_timesteps = (ignore_timesteps_left < timesteps) & (timesteps < ignore_timesteps_right)
+
+    # This algorithm works by finding points of maximum curvature in a given curve.
+    # It identifies where the drop in the curve begins to slow down.
+    kl = KneeLocator(
+        timesteps[filtered_timesteps],
+        lid_curve[filtered_timesteps],
+        S=S,
+        curve="convex",
+        direction="decreasing",
+    )
+    best_knee = kl.knee
+    best_knee_y = kl.knee_y # the y value is the LID
+
+    # when the knee is not detected, we return the ambient dimension.
+    if best_knee is None:
+        best_knee_y = ambient_dim
+
+    if return_info:
+        return {
+            "lid": best_knee_y,
+            "convex_hull": lid_curve[filtered_timesteps],
+            "timesteps": timesteps[filtered_timesteps],
+            "knee_timestep": best_knee,
+        }
+    return best_knee_y
