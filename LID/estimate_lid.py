@@ -3,7 +3,7 @@ import sys
 
 import numpy as np
 
-from LID.utils import compute_knee, plot_lid_curve_with_knee
+from utils import compute_knee, plot_lid_curve_with_knee
 
 # Automatically add the project root to PYTHONPATH
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

@@ -1,6 +1,6 @@
 import math
 import numbers
-from typing import Callable, Literal
+from typing import Callable, Literal, Optional
 import torch
 import tqdm
 
