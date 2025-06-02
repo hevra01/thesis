@@ -1,5 +1,4 @@
 {
-  "t": [0.01],
   "model": {
     "data_dim": 784,
     "hidden_sizes": [4096, 2048, 1024, 1024, 512, 512],
@@ -16,7 +15,15 @@
     "transform": null,              
     "root": "./data",               
     "subset_size": null,           
-    "class_filter": null            
+    "class_filter": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
   },
-  "save_path": "../output_hev/mnist/lid_estimations/lid_curve_with_knee.png"
+  "save_path": "../output_hev/mnist/lid_estimations/lid_curve_with_knee_all_classes.png",
+
+  "wand_enabled": true,
+  "wandb": {
+    "project": "MNIST LID estimation",
+    "run_name": "all classes",
+    "mode": "online"
+  },
+  "hutchinson_sample_count": 50
 }
