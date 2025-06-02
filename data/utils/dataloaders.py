@@ -3,7 +3,7 @@ from data.datasets.huggingface_dataset import HuggingFaceDataset
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 
-def get_mnist_dataloader(batch_size=64, split="test", flatten=False):
+def get_mnist_dataloader(batch_size=120, split="test", flatten=False):
     # Load raw MNIST from HuggingFace
     raw_dataset = load_dataset("mnist", split=split)
 

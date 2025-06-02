@@ -5,17 +5,18 @@
     "hidden_sizes": [4096, 2048, 1024, 1024, 512, 512],
     "time_embedding_dim": 128
   },
-  "checkpoint_path": "output_hev/mnist/checkpoints/latest.pt",
+  "checkpoint_path": "../output_hev/mnist/checkpoints/latest.pt",
   "device": "cuda",
-    "dataset": {
+  "dataset": {
     "name": "mnist",                 
-    "batch_size": 64,               
+    "batch_size": 128,               
     "split": "test",                
-    "num_workers": 4,               
+    "num_workers": 40,               
     "shuffle": false,              
     "transform": null,              
     "root": "./data",               
     "subset_size": null,           
     "class_filter": null            
-  }
+  },
+  "save_path": "../output_hev/mnist/lid_estimations/lid_curve_with_knee.png"
 }

@@ -129,6 +129,8 @@ def compute_knee(
 
     # This algorithm works by finding points of maximum curvature in a given curve.
     # It identifies where the drop in the curve begins to slow down.
+    print(f"Filtered timesteps: {timesteps[filtered_timesteps]}")
+    print(f"LID curve: {lid_curve[filtered_timesteps]}")
     kl = KneeLocator(
         timesteps[filtered_timesteps],
         lid_curve[filtered_timesteps],

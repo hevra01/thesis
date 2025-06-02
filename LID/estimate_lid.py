@@ -8,7 +8,6 @@ from utils import compute_knee, plot_lid_curve_with_knee
 # Automatically add the project root to PYTHONPATH
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
-    print(project_root)
     sys.path.insert(0, project_root)
 
 import json
@@ -52,8 +51,6 @@ def estimate_LID_over_t_range_batch(x, t_values, lid_estimator):
     # loop over each t value to estimate LID
     for t in t_values:
         lid_vals = lid_estimator._estimate_lid(x, t=t)
-        print(f"Estimated LID for t={t}: {lid_vals}")
-        exit(0)
 
         # For a batch, we take the mean of LID values across the batch.
         # However, if the input is a single instance, we just take the value directly.
@@ -95,6 +92,7 @@ def estimate_LID_over_t_range_dataloader(
             t_values=t_values,
             lid_estimator=lid_estimator
         )
+        print(f"Batch LID Curve: {batch_lid_curve}")
 
         # Add the batch's mean LID curve to the running sum
         # This operation adds the values element-wise (for each t).
@@ -120,6 +118,15 @@ def main():
     # Load config
     with open(args.config, "r") as f:
         cfg = json.load(f)
+
+    # # Initialize wandb if enabled
+    # if cfg["wand_enabled"]:
+    #     wandb.init(
+    #         project=cfg.wandb.project,
+    #         name=cfg.wandb.run_name,
+    #         mode=cfg.wandb.mode,
+    #         config=
+    #     )
 
     # Set device
     device = torch.device(cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
@@ -147,23 +154,26 @@ def main():
     dataloader = get_mnist_dataloader(flatten=True)
 
     # the range of t values over which to estimate LID
-    t_values = torch.linspace(0.0, 1, 100)
+    t_values = torch.linspace(0.15, 0.5, 50)
+    print(t_values)
 
     # Estimate LID over the range of t values for the entire dataset.
     # Then use the knee algorithm to find the best LID estimate.
+    
+    #knee_info = estimate_LID_over_t_range(next(iter(dataloader))["image"], lid_estimator,t_values, ambient_dim=model_cfg["data_dim"], device=device, return_info=True)
     knee_info = estimate_LID_over_t_range_dataloader(dataloader, lid_estimator, 
                                                    t_values, 
                                                    ambient_dim=model_cfg["data_dim"],
                                                    device=device, return_info=True)
     
+    print(knee_info["lid"], knee_info["knee_timestep"], knee_info["convex_hull"])
     # visualize the LID curve and knee point
     plot_lid_curve_with_knee(
         knee_info["convex_hull"],
+        knee_info["timesteps"],
         knee_info["knee_timestep"],
-        t_values,
         knee_info["lid"],
-        ambient_dim=model_cfg["data_dim"],
-        output_path=cfg.get("output_plot_path", "lid_curve_with_knee.png")
+        save_path=cfg.get("save_path")
     )
 
    
