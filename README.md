@@ -2,7 +2,7 @@
 
 This repository provides code for training diffusion models (e.g., on MNIST) and estimating Local Intrinsic Dimensionality (LID) using a Fokker-Planck-based estimator.
 
-## Training
+## Training for LID estimation
 
 To train a model (e.g., on MNIST), run:
 

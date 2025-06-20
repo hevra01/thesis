@@ -22,7 +22,7 @@
   "wand_enabled": true,
   "wandb": {
     "project": "MNIST LID estimation",
-    "run_name": "all classes",
+    "run_name": "for all classes",
     "mode": "online"
   },
   "hutchinson_sample_count": 50

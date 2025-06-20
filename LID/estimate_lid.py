@@ -101,7 +101,6 @@ def estimate_LID_over_t_range_dataloader(
             hutchinson_sample_count=hutchinson_sample_count,
             lid_estimator=lid_estimator
         )
-        print(f"Batch LID Curve: {batch_lid_curve}")
 
         # Add the batch's mean LID curve to the running sum
         # This operation adds the values element-wise (for each t).
@@ -156,7 +155,7 @@ def main():
     # NOTE: this is a bit hard coded for MNIST, it needs to be more 
     # flexible to work with other datasets.
     # Initialize the dataset
-    dataloader = get_mnist_dataloader(flatten=True, class_filter=cfg.get("class_filter"))
+    dataloader = get_mnist_dataloader(batch_size=cfg.get("dataset")["batch_size"], flatten=True, class_filter=cfg.get("dataset")["class_filter"])
 
     # the range of t values over which to estimate LID
     t_values = torch.linspace(0.0, model.t_max, 100)
@@ -173,7 +172,6 @@ def main():
      # Use the knee algorithm to find the best LID estimate from the averaged curve
     knee_info = compute_knee(t_values, lid_curve, ambient_dim=model_cfg["data_dim"], return_info=True)
     
-    print(knee_info["lid"], knee_info["knee_timestep"], knee_info["convex_hull"])
     # visualize the LID curve and knee point
     plot_lid_curve_with_knee(
         lid_curve,
