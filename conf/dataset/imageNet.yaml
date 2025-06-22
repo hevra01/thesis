@@ -1,0 +1,30 @@
+train:
+  _target_: data.datasets.huggingface_dataset.HuggingFaceDataset
+
+  dataset:
+    _target_: datasets.load_dataset
+    path: imagenet-1k
+    split: train
+    trust_remote_code: True
+    # data_dir: /path/to/imagenet  # Uncomment and set if using local files
+
+  transform:
+    _target_: torchvision.transforms.Compose
+    transforms: ${oc.dict.values:experiment.all_data_transforms}
+
+val:
+  _target_: data.datasets.huggingface_dataset.HuggingFaceDataset
+
+  dataset:
+    _target_: datasets.load_dataset
+    path: imagenet-1k
+    split: validation
+    trust_remote_code: True
+    # data_dir: /path/to/imagenet  # Uncomment and set if using local files
+
+  transform:
+    _target_: torchvision.transforms.Compose
+    transforms: ${oc.dict.values:experiment.all_data_transforms}
+
+data_dim: 150528  # 3*224*224 for standard ImageNet images
+image_size: 224
