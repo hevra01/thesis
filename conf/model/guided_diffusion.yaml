@@ -1,0 +1,18 @@
+# Required by Hydra to know which class to instantiate
+# The import path is relative to the file which we run (in this case, estimate_lid.py)
+_target_: guided_diffusion.script_util.create_model_and_diffusion
+
+# Arguments for the Guided Diffusion model
+image_size: 256  # Size of the input image
+class_cond: false  # Disable class conditioning
+learn_sigma: true  # Predict both noise mean and variance
+num_channels: 256  # out_channels of the first conv layer.
+num_res_blocks: 2  # Number of residual blocks
+num_head_channels: 64  # Channels per attention head
+attention_resolutions: "32,16,8"  # Resolutions for self-attention blocks
+diffusion_steps: 1000  # Sets the number of timesteps in the noise corruption (or removal) process.
+# For forward, at each new timestep, the noise level increases by a constant increment—so early steps add just a bit of noise,
+# progressing steadily to more noise. For backward (noise removal), we start by removing a lot of noise 
+noise_schedule: linear  # Noise schedule type
+resblock_updown: true  # Use residual blocks for up/down sampling
+use_fp16: true  # Enable half-precision (FP16)
