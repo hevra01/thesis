@@ -1,4 +1,5 @@
 {
+  "model_type": "mlp_unet",
   "model": {
     "data_dim": 784,
     "hidden_sizes": [4096, 2048, 1024, 1024, 512, 512],

@@ -1,7 +1,6 @@
 # Required by Hydra to know which class to instantiate
 # The import path is relative to the file which we run (in this case, estimate_lid.py)
 _target_: guided_diffusion.script_util.create_model_and_diffusion
-
 # Arguments for the Guided Diffusion model
 image_size: 256  # Size of the input image
 class_cond: false  # Disable class conditioning
@@ -16,3 +15,16 @@ diffusion_steps: 1000  # Sets the number of timesteps in the noise corruption (o
 noise_schedule: linear  # Noise schedule type
 resblock_updown: true  # Use residual blocks for up/down sampling
 use_fp16: true  # Enable half-precision (FP16)
+# the below args are same as default
+num_heads: 4,
+channel_mult: ''
+num_heads_upsample: -1  # Number of attention heads during upsampling
+dropout: 0.0  # Dropout rate
+use_kl: false  # Use KL divergence loss
+predict_xstart: false  
+rescale_timesteps: false  # Rescale timesteps
+rescale_learned_sigmas: false  # Rescale learned sigmas
+use_checkpoint: false  # Use gradient checkpointing
+use_scale_shift_norm: true  # Use scale-shift normalization
+use_new_attention_order: false  # Use new attention order
+timestep_respacing: ''

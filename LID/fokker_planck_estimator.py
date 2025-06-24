@@ -3,7 +3,7 @@ import math
 import numbers
 from typing import Literal
 import torch
-from model_based_estimator import ModelBasedLIDEstimator
+from LID.model_based_estimator import ModelBasedLIDEstimator
 from sde.utils import compute_trace_of_jacobian, HUTCHINSON_DATA_DIM_THRESHOLD
 from sde.sdes import VpSDE
 
@@ -78,7 +78,7 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
                 t = torch.tensor(t).float()
             t: torch.Tensor
             t_repeated = t.repeat(x.shape[0]).to(x.device)
-            return self.model.score_net(x, t=t_repeated, **score_kwargs)
+            return self.model.score_net(x, t_repeated, **score_kwargs)
 
         laplacian_term = compute_trace_of_jacobian(
             fn=functools.partial(score_fn, t=t),
