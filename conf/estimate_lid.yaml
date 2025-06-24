@@ -1,0 +1,8 @@
+device: cuda 
+out_dir: ./output_hev # where to keep the logs
+
+defaults:
+- experiment: ??? # the value of this key is set in the command line
+- _self_
+
+hutchinson_sample_count: 1  # Number of samples for Hutchinson's trace estimator
