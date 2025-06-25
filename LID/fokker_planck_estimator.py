@@ -78,7 +78,15 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
                 t = torch.tensor(t).float()
             t: torch.Tensor
             t_repeated = t.repeat(x.shape[0]).to(x.device)
-            return self.model.score_net(x, t_repeated, **score_kwargs)
+            
+            # some score models return both noise and variance, so we need to handle that.
+            noise_and_variance = self.model.score_net(x, t_repeated, **score_kwargs)
+            # check if noise_and_variance is a tuple or a single tensor
+            if isinstance(noise_and_variance, tuple):
+                noise, variance = noise_and_variance.chunk(2, dim=1)  # Split the output into noise and variance components
+            else:
+                noise = noise_and_variance
+            return noise
 
         laplacian_term = compute_trace_of_jacobian(
             fn=functools.partial(score_fn, t=t),
@@ -100,7 +108,7 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
             t = torch.tensor(t).float()
         t: torch.Tensor
         t_repeated = t.repeat(x.shape[0]).to(self.device)
-        scores_flattened = self.model.score_net(coeff * x, t=t_repeated, **score_kwargs).reshape(
+        scores_flattened = self.model.score_net(coeff * x, t_repeated, **score_kwargs).reshape(
             x.shape[0], -1
         )
         score_norm_term = torch.sum(scores_flattened * scores_flattened, dim=1)
