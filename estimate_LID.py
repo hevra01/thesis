@@ -29,8 +29,19 @@ def main(cfg):
 
     # Configure model
     score_net, _ = instantiate(cfg.experiment.model)  # instantiate the model
+    # Move the model to the specified device
+    score_net = score_net.to(device)  
 
-    score_net = score_net.to(device)  # move the model to the device
+    checkpoint_path = cfg.experiment.checkpoint_path
+
+    # Load the pretrained checkpoint
+    ckpt = torch.load(checkpoint_path)
+    score_net.load_state_dict(ckpt, strict=True)
+
+    # some models support fp16, so we convert the model to fp16 if specified
+    enable_fp16 = cfg.experiment.enable_fp16
+    if enable_fp16:
+        score_net.convert_to_fp16()
 
     # Configure the dataloader
     dataloader = instantiate(cfg.experiment.dataset)
