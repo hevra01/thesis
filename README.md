@@ -19,14 +19,13 @@ python train.py experiment=train_mnist
 To estimate the Local Intrinsic Dimensionality (LID) using a trained model, run:
 
 ```sh
-python LID/estimate_lid.py --config conf/LID/LID_estimator_config.json
+python estimate_LID.py experiment=estimate_lid_imageNet.yaml
 ```
 
-- The config file specifies the model architecture, checkpoint path, device, and dataset details.
-- You can modify `conf/LID/LID_estimator_config.json` to change the dataset, batch size, or other parameters.
 
 ## Notes
 
 - Make sure to train the model and have a valid checkpoint before running LID estimation.
+- you can also used pretrained diffusion model's as score functions. E.g. for imagenet, I used guided diffusion from OPENAI.
 - For new datasets, update the dataset section in the config accordingly.
 ---

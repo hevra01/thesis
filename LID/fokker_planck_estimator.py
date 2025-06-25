@@ -81,8 +81,10 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
             
             # some score models return both noise and variance, so we need to handle that.
             noise_and_variance = self.model.score_net(x, t_repeated, **score_kwargs)
-            # check if noise_and_variance is a tuple or a single tensor
-            if isinstance(noise_and_variance, tuple):
+            
+            # check if the output's second dimension is 6, which means it returns both noise and variance.
+            # since for the Fokker-Planck based LID estimation, we only need the noise term, we ignore the variance.
+            if noise_and_variance.shape[1] == 6:
                 noise, variance = noise_and_variance.chunk(2, dim=1)  # Split the output into noise and variance components
             else:
                 noise = noise_and_variance

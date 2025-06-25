@@ -5,4 +5,4 @@ defaults:
 - experiment: ??? # the value of this key is set in the command line
 - _self_
 
-hutchinson_sample_count: 1  # Number of samples for Hutchinson's trace estimator
+hutchinson_sample_count: 2  # Number of samples for Hutchinson's trace estimator

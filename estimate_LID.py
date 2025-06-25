@@ -1,3 +1,4 @@
+import json
 import os
 
 import hydra
@@ -5,7 +6,7 @@ import torch
 import wandb
 from hydra.utils import instantiate
 
-from LID.estimate_lid import estimate_LID_over_t_range, estimate_LID_over_t_range_dataloader
+from LID.estimate_lid import compute_knees_for_all_data_points_in_batch, estimate_LID_over_t_range, estimate_LID_over_t_range_dataloader
 from LID.fokker_planck_estimator import FlipdEstimator
 from LID.utils import compute_knee, plot_lid_curve_with_knee
 from sde.sdes import VpSDE
@@ -55,25 +56,59 @@ def main(cfg):
     t_values = torch.linspace(0.0, model.t_max, 100)
     hutchinson_sample_count = cfg.hutchinson_sample_count
 
-    # Estimate LID over the range of t values for the entire dataset.
+    all_knees_per_instances = []
 
-    lid_curve = estimate_LID_over_t_range(next(iter(dataloader))[0], lid_estimator,t_values, ambient_dim=data_dim, hutchinson_sample_count=hutchinson_sample_count, device=device, return_info=True)
+    for batch in dataloader:
+        images = batch[0]  # adjust if your batch has a different structure
+
+        # Step 1: Compute LID over t for this batch
+        lid_over_t = estimate_LID_over_t_range(
+           images, t_values, hutchinson_sample_count, lid_estimator
+        )
+
+        # Step 2: Compute knees for this batch
+        knees_this_batch = compute_knees_for_all_data_points_in_batch(
+            lid_over_t, ambient_dim=data_dim, return_info=False
+        )
+
+        # Step 3: Append results
+        all_knees_per_instances.extend(knees_this_batch)
+        print(all_knees_per_instances)
+
+    # # the return is a dictionary with t values as keys and LID estimates as values of each data point
+    # lid_over_t = estimate_LID_over_t_range(next(iter(dataloader))[0], t_values, hutchinson_sample_count, lid_estimator)
+    # print(f"Estimated LID over t range: {lid_over_t}")
+    # knees_per_instance = compute_knees_for_all_data_points_in_batch(lid_over_t, ambient_dim=data_dim, return_info=False)
+
+    # print(knees_per_instance)
+    # # Convert to pure Python floats
+    # knees_list_serializable = [float(k) for k in knees_per_instance]
+
+    # # Save knees_list_serializable to a JSON file
+    # output_path = "knees_list.json"
+    # with open(output_path, "w") as f:
+    #     json.dump(knees_list_serializable, f)
+
+    # print(f"Saved knees_list to {output_path}")
+
+    #lid_curve = estimate_LID_over_t_range(next(iter(dataloader))[0], lid_estimator, t_values, ambient_dim=data_dim, hutchinson_sample_count=hutchinson_sample_count, device=device, return_info=True)
     # lid_curve = estimate_LID_over_t_range_dataloader(dataloader, lid_estimator, 
     #                                                t_values, hutchinson_sample_count=hutchinson_sample_count,
     #                                                ambient_dim=data_dim,
     #                                                device=device, return_info=True)
 
      # Use the knee algorithm to find the best LID estimate from the averaged curve
-    knee_info = compute_knee(t_values, lid_curve, ambient_dim=data_dim, return_info=True)
+    # lid_curve = lid_over_t.values()
+    # knee_info = compute_knee(t_values, lid_curve, ambient_dim=data_dim, return_info=True)
 
-    # visualize the LID curve and knee point
-    plot_lid_curve_with_knee(
-        lid_curve,
-        t_values,
-        knee_info["knee_timestep"],
-        knee_info["lid"],
-        save_path=cfg.get("save_path")
-    )
+    # # visualize the LID curve and knee point
+    # plot_lid_curve_with_knee(
+    #     lid_curve,
+    #     t_values,
+    #     knee_info["knee_timestep"],
+    #     knee_info["lid"],
+    #     save_path=cfg.get("save_path")
+    # )
 
    
 

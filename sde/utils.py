@@ -166,7 +166,6 @@ def compute_trace_of_jacobian(
             v_batch, x_batch = vx
             v_batch = v_batch.to(x.device)
             x_batch = x_batch.to(x.device)
-
             all_quadratic_forms.append(
                 torch.sum(
                     v_batch * torch.func.jvp(fn, (x_batch,), tangents=(v_batch,))[1],
