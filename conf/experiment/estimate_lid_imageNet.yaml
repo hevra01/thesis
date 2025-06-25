@@ -3,3 +3,5 @@ defaults:
   - /dataset: imageNet  # Use the ImageNet dataset configuration
 
 data_dim: 65536  # Dimension of the data, set to 256x256 for ImageNet
+checkpoint_path: output_hev/imagenet/checkpoint/256x256_diffusion_uncond.pt  # Path to the model checkpoint
+enable_fp16: true
