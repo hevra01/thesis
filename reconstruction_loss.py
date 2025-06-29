@@ -76,7 +76,9 @@ class VGGPerceptualLoss(nn.Module):
         # Compute L1 distance between corresponding feature maps
         loss = 0.0
         for k in feats_x:
-            loss += nn.functional.l1_loss(feats_x[k], feats_y[k])
+            loss += torch.abs(feats_x[k] - feats_y[k]).mean(dim=[1, 2, 3])  # → shape: [B]
+
+            #loss += nn.functional.l1_loss(feats_x[k], feats_y[k])
         return loss
 
 
@@ -84,6 +86,9 @@ class MAELoss:
     def __call__(self, reconstructed_img, original_img):
         """
         Compute Mean Absolute Error (MAE) between two tensors.
+
+        If the images have range of [0,1], then the MAE will have a range of [0,1] as well.
+        However, if the images are in the range of [0, 255], then the MAE will be in the range of [0, 255].
 
         Args:
             reconstructed_img: torch.Tensor with any shape (e.g., [B, C, H, W])
@@ -93,10 +98,9 @@ class MAELoss:
             torch.Tensor: scalar loss (averaged over all elements)
         """
         # Compute absolute differences
-        diff = (reconstructed_img - original_img).abs()
-        # Return mean loss
-        return diff.mean()
-    
+        mae_per_image = torch.abs(reconstructed_img - original_img).mean(dim=[1, 2, 3])  # → shape: [B]
+        return mae_per_image
+
 def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights=None):
     """
     Computes a weighted sum of reconstruction losses between pred and target.
@@ -124,7 +128,59 @@ def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights
         loss_name = fn.__class__.__name__
         # fn(...) calls fn.__call__(...), which calls fn.forward(...)
         loss_val = fn(reconstructed_img, original_img)
+
         total_loss += w * loss_val
-        loss_dict[loss_name] = loss_val.item() if hasattr(loss_val, 'item') else float(loss_val)
+        loss_dict[loss_name] = loss_val
 
     return total_loss, loss_dict
+
+
+def reconstructionLoss_vs_compressionRate(model, images, k_keep_list, loss_fns, device, loss_weights=None):
+    """
+    Computes reconstruction losses for different compression rates.
+    
+    Args:
+        model: FlexTok model instance.
+        images: Tensor of shape (B, 3, H, W) with input images.
+        k_keep_list: List of integers representing the number of tokens to keep.
+        loss_fns: List of loss functions to compute.
+        loss_weights: List of weights for each loss function.
+
+    Returns:
+        dict: Dictionary with compression rates as keys and total losses as values.
+    """
+    results = {}
+
+    # First tokenize the images into register tokens, which already handles the VAE mapping to latents.
+    tokens_list = model.tokenize(images.to(device))
+
+    # we want to see how the reconstruction error changes with different compression rates.
+    # lower k_keep means (fewer registers) more compression, higher k_keep means less compression.
+    for k_keep in k_keep_list:
+        # the first ":" means for all images in the batch, the second refers to the register tokens.
+        # we keep only the first k_keep tokens.
+        tokens_list_filtered = [t[:,:k_keep] for t in tokens_list]
+        
+        reconst = model.detokenize(
+            tokens_list_filtered,
+            timesteps=20,
+            guidance_scale=7.5,
+            perform_norm_guidance=True,
+        )
+
+        # the output of the decoder is in the range [-1, 1].
+        # we want to map it to [0, 1] so that it can be comparable with 
+        # the original images, which also have a range of [0, 1] 
+        # (when we got imagenet form the dataloader, we use ToTensor() which makes them [0,1]).
+        reconst = (reconst + 1.0) / 2.0
+        reconst = reconst.clamp(0.0, 1.0)
+        
+        total_loss, loss_dict = reconstruction_error(reconst, images, 
+            loss_fns=loss_fns,
+            loss_weights=loss_weights
+        )
+        print(f"Compression rate k_keep={k_keep}: Total Loss = {loss_dict.values()}")
+        
+        results[k_keep] = loss_dict
+    
+    return results
