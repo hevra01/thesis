@@ -47,6 +47,8 @@ def get_imagenet_dataloader(
         # Converts the image from a PIL/numpy array in range [0, 255] to a PyTorch tensor in range [0.0, 1.0]
         T.ToTensor(),
         # Applies per-channel normalization
+        # Given that the normal (expected) distribution has this mean/std, 
+        # re-center and rescale the image data accordingly so it behaves like zero-mean, unit-variance data.
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
