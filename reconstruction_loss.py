@@ -111,7 +111,7 @@ def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights
         loss_fns (list of callables): List of loss functions (e.g., [nn.MSELoss(), VGGLoss(), ...]).
         loss_weights (list of floats, optional): Weights for each loss function. If None, all weights are 1.
     
-    Returns:
+Returns:
         torch.Tensor: The total (weighted) reconstruction error.
         dict: A dictionary of individual loss values for logging/debugging.
     """
@@ -154,6 +154,14 @@ def reconstructionLoss_vs_compressionRate(model, images, k_keep_list, loss_fns, 
     # First tokenize the images into register tokens, which already handles the VAE mapping to latents.
     tokens_list = model.tokenize(images.to(device))
 
+    # ImageNet normalization constants
+    imagenet_mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(device)
+    imagenet_std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(device)
+
+    # Unnormalize the original input images and scale to [0, 1]
+    images_unnorm = images * imagenet_std + imagenet_mean  # [0, 1]
+    
+
     # we want to see how the reconstruction error changes with different compression rates.
     # lower k_keep means (fewer registers) more compression, higher k_keep means less compression.
     for k_keep in k_keep_list:
@@ -168,19 +176,16 @@ def reconstructionLoss_vs_compressionRate(model, images, k_keep_list, loss_fns, 
             perform_norm_guidance=True,
         )
 
-        # the output of the decoder is in the range [-1, 1].
-        # we want to map it to [0, 1] so that it can be comparable with 
-        # the original images, which also have a range of [0, 1] 
-        # (when we got imagenet form the dataloader, we use ToTensor() which makes them [0,1]).
-        reconst = (reconst + 1.0) / 2.0
-        reconst = reconst.clamp(0.0, 1.0)
-        
-        total_loss, loss_dict = reconstruction_error(reconst, images, 
+    
+        # Convert reconstructed image from [-1, 1] to [0, 1]
+        reconst_scaled = (reconst.clamp(-1, 1) + 1) / 2  # --> [0, 1]
+
+        total_loss, loss_dict = reconstruction_error(reconst_scaled, images_unnorm, 
             loss_fns=loss_fns,
             loss_weights=loss_weights
         )
         print(f"Compression rate k_keep={k_keep}: Total Loss = {loss_dict.values()}")
         
-        results[k_keep] = loss_dict
+        results[k_keep] = [loss_dict, reconst]
     
     return results
