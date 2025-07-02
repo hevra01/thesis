@@ -5,3 +5,5 @@ defaults:
 data_dim: 65536  # Dimension of the data, set to 256x256 for ImageNet
 checkpoint_path: output_hev/imagenet/checkpoint/256x256_diffusion_uncond.pt  # Path to the model checkpoint
 enable_fp16: true
+t_value: 15
+output_lid_file_path: lid_25_corrected.json  # Path to save the LID values
