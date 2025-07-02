@@ -76,18 +76,10 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
             """Computes the score function for the given input x, where x is a noisy image as a data point, and time t."""
             if isinstance(t, numbers.Number):
                 t = torch.tensor(t).float()
-            t: torch.Tensor
+            t: torch.Tensord
             t_repeated = t.repeat(x.shape[0]).to(x.device)
             
-            # some score models return both noise and variance, so we need to handle that.
-            noise_and_variance = self.model.score_net(x, t_repeated, **score_kwargs)
-            
-            # check if the output's second dimension is 6, which means it returns both noise and variance.
-            # since for the Fokker-Planck based LID estimation, we only need the noise term, we ignore the variance.
-            if noise_and_variance.shape[1] == 6:
-                noise, variance = noise_and_variance.chunk(2, dim=1)  # Split the output into noise and variance components
-            else:
-                noise = noise_and_variance
+            noise = self.model.score(x, t_repeated, **score_kwargs)
             return noise
 
         laplacian_term = compute_trace_of_jacobian(
@@ -110,7 +102,7 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
             t = torch.tensor(t).float()
         t: torch.Tensor
         t_repeated = t.repeat(x.shape[0]).to(self.device)
-        scores_flattened = self.model.score_net(coeff * x, t_repeated, **score_kwargs).reshape(
+        scores_flattened = self.model.score(coeff * x, t_repeated, **score_kwargs).reshape(
             x.shape[0], -1
         )
         score_norm_term = torch.sum(scores_flattened * scores_flattened, dim=1)
