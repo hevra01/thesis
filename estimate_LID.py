@@ -94,7 +94,7 @@ def main(cfg):
     knees_list_serializable = [float(k) for k in lid_values]
 
     # Save knees_list_serializable to a JSON file
-    output_path = "lid_9_corrected.json"
+    output_path = cfg.experiment.output_lid_file_path
     with open(output_path, "w") as f:
         json.dump(knees_list_serializable, f)
 
