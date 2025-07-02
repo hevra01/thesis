@@ -101,10 +101,10 @@ class SDE(ABC, nn.Module):
     
     def score(self, x, t, **score_kwargs):
         """
-        The score s(x, t) of the forward SDE at time t,
-        the output of the model is used directly, otherwise, the output is normalized by the standard deviation of the score.
+        The score network, can either predict the standard noise (epsilon) or the score (gradient of log p_t(x)).
+        The score is scaled by the standard deviation (sigma) of the noise at time t. Guided diffusion and DDPM
+        models usually return the standard noise (epsilon), hence, when we need the score we divide by sigma(t).
         """
-
         sigma_t = self.sigma(t).to(x.device)
 
         t = copy_tensor_or_create(t, device=x.device)
@@ -115,9 +115,18 @@ class SDE(ABC, nn.Module):
             new_dims = x.ndim - sigma_t.ndim  # Expand sigma_t for broadcasting
             sigma_t = sigma_t.reshape(x.shape[:1] + (1,) * new_dims)
 
-        # Compute score
-        score_sigma_t = self.score_net(x, t, **score_kwargs)
-        return score_sigma_t / sigma_t
+        noise_and_variance = self.score_net(x, t, **score_kwargs)
+        # NOTE: We took the negative bc in guided diffusion, we return the noise (epsilon). However, in the 
+        # custome MLP that was built, the model output is already the score. 
+
+        # check if the output's second dimension is 6, which means it returns both noise and variance.
+        # since for the Fokker-Planck based LID estimation, we only need the noise term, we ignore the variance.
+        if noise_and_variance.shape[1] == 6:
+            noise, variance = noise_and_variance.chunk(2, dim=1)  # Split the output into noise and variance components
+        else:
+            noise = noise_and_variance
+        
+        return -noise / sigma_t
     
     def solve_reverse_sde(self, x_start, t_start=1.0, t_end=1e-4, steps=1000, **score_kwargs):
         t_start, t_end = self._match_timestep_shapes(t_start, t_end)
@@ -151,7 +160,9 @@ class VpSDE(SDE):
         score_net: nn.Module,
         beta_min: float = 0.1,
         beta_max: float = 20,
-        t_max: float = 1.0):
+        # this depends on the score prediction model.
+        # in stable diffusion it is 1000, but in the MLP it was 1
+        t_max: float = 1000.0):
 
         self.beta_min = torch.tensor(beta_min)
         self.beta_max = torch.tensor(beta_max)
