@@ -80,6 +80,12 @@ class VGGPerceptualLoss(nn.Module):
 
             #loss += nn.functional.l1_loss(feats_x[k], feats_y[k])
         return loss
+    
+    
+class MSELoss:
+    def __call__(self, input, target):
+        return torch.nn.functional.mse_loss(input, target)
+
 
 
 class MAELoss:
@@ -111,7 +117,7 @@ def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights
         loss_fns (list of callables): List of loss functions (e.g., [nn.MSELoss(), VGGLoss(), ...]).
         loss_weights (list of floats, optional): Weights for each loss function. If None, all weights are 1.
     
-Returns:
+    Returns:
         torch.Tensor: The total (weighted) reconstruction error.
         dict: A dictionary of individual loss values for logging/debugging.
     """
