@@ -10,7 +10,7 @@ optimizer:
 training:
     num_epochs: 10
     loss: 
-      _target_: torch.nn.functional.mse_loss
+      _target_: reconstruction_loss.MSELoss
     checkpoint_dir: "/BS/data_mani_compress/work/thesis/thesis/output_hev/imagenet/bpp_predictor/baseline"
 
 # this is for the main dataset that has the mse_errors, vgg_errors for all the images for different

@@ -5,7 +5,7 @@ _target_: data.utils.dataloaders.get_imagenet_dataloader
 # Arguments for the ImageNet dataloader
 root: /BS/databases23/imagenet/original/  # Path to the ImageNet dataset
 split: val  # Dataset split, can be "train" or "val"
-batch_size: 64  # Batch size for loading data
+batch_size: 32  # Batch size for loading data
 image_size: 256  # Image size for resizing and cropping
 class_filter: null  # Optional list of class IDs to filter (null means no filtering)
 num_workers: 64  # Number of workers for data loading
