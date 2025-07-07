@@ -1,0 +1,5 @@
+_target_: models.bpp_predictor.CompressionRatePredictor
+input_dim: 4096  # Flattened VAE latents dimension 
+loss_dim: 1
+hidden_dims: [512, 256, 128, 64]
+hf_hub_path: stabilityai/sd-vae-ft-mse
