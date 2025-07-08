@@ -75,6 +75,7 @@ class ReconstructionDataset(Dataset):
         """
         Args:
             reconstruction_data (list): List of dicts containing reconstruction metrics.
+                (img, k_value, mse_error, vgg_error).
             all_registers (list): List of lists of register IDs (per image).
             num_pixels (int): Number of pixels in each image (e.g., 256*256).
             dataloader (DataLoader): Dataloader from which images can be fetched.
@@ -104,7 +105,7 @@ class ReconstructionDataset(Dataset):
         data_point = self.reconstruction_data[idx]
         image_id = data_point["image_id"]
         k_value = data_point["k_value"]
-        mse_error = data_point["mse_error"]
+        mae_error = data_point["mae_error"]
         vgg_error = data_point["vgg_error"]
 
         # Compute compression rate based on Huffman codes
@@ -122,7 +123,7 @@ class ReconstructionDataset(Dataset):
         return {
             "image": self.dataloader.dataset[image_id][0],  # Get the image from the dataloader
             "k_value": k_value,
-            "mse_error": mse_error,
+            "mae_error": mae_error,
             "vgg_error": vgg_error,
             "bpp": bpp,  # bits per pixel
         }
