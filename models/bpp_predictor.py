@@ -29,7 +29,7 @@ class CompressionRatePredictor(nn.Module):
             layers.append(nn.ReLU())
             mlp_input_dim = hidden_dim
         layers.append(nn.Linear(mlp_input_dim, 1))  # Output layer for compression rate
-        layers.append(nn.Sigmoid())  # Ensure output is between 0 and 1
+        #layers.append(nn.Sigmoid())  # Ensure output is between 0 and 1
         self.mlp = nn.Sequential(*layers)
 
     def forward(self, images, tolerated_loss):
