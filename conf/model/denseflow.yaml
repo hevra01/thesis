@@ -1,0 +1,14 @@
+_target_: experiments.image.model.dense_flow.DenseFlow
+
+# Input image shape (e.g., ImageNet64)
+data_shape: [3, 64, 64]
+
+# DenseNet-like flow architecture configs
+block_config: [6, 4, 1]
+layers_config: [5, 6, 20]
+layer_mid_chnls: [48, 48, 48]
+growth_rate: 10
+
+# Optional args
+num_bits: 8
+checkpointing: true

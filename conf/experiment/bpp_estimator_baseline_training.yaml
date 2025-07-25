@@ -8,7 +8,7 @@ optimizer:
   lr: 0.0001
 
 training:
-    num_epochs: 10
+    num_epochs: 100
     loss: 
       _target_: reconstruction_loss.MSELoss
     checkpoint_dir: "/BS/data_mani_compress/work/thesis/thesis/output_hev/imagenet/bpp_predictor/baseline"
@@ -23,4 +23,4 @@ reconstruction_dataset:
 
   batch_size: 32 # this is the batch size for the reconstruction dataset
 
-checkpoint_path: "/BS/data_mani_compress/work/thesis/thesis/output_hev/imagenet/bpp_predictor/baseline/compression_predictor_epoch_"
+checkpoint_path: "/BS/data_mani_compress/work/thesis/thesis/output_hev/imagenet/bpp_predictor/baseline_no_sig_100_epoch/compression_predictor_epoch_"

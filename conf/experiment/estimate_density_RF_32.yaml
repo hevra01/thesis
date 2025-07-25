@@ -1,0 +1,10 @@
+defaults:
+  - /model: flextok  # Use the FlexTok model configuration
+  - /dataset: imageNet  # Use the ImageNet dataset configuration
+
+
+output_path: "imgnet_densities_RF_32.json"  # Path to save the estimated densities
+keep_k: 32
+hutchinson_samples: 1  # Number of samples for the Hutchinson estimator
+
+register_path: "all_registers_imagenet.json"
