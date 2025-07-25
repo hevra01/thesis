@@ -22,6 +22,11 @@ To estimate the Local Intrinsic Dimensionality (LID) using a trained model, run:
 python estimate_LID.py experiment=estimate_lid_imageNet.yaml
 ```
 
+## Density Estimation
+```sh
+python estimate_density_RF.py experiment=estimate_density_RF
+```
+
 
 ## Notes
 

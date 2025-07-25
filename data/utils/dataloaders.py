@@ -105,7 +105,7 @@ class ReconstructionDataset(Dataset):
         data_point = self.reconstruction_data[idx]
         image_id = data_point["image_id"]
         k_value = data_point["k_value"]
-        mae_error = data_point["mae_error"]
+        mae_error = data_point["mse_error"]
         vgg_error = data_point["vgg_error"]
 
         # Compute compression rate based on Huffman codes

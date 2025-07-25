@@ -1,6 +1,6 @@
 [submodule "external/flextok"]
 	path = external/flextok
-	url = https://github.com/apple/ml-flextok.git
+	url = https://github.com/hevra01/Flex-Tok
 [submodule "external/guided-diffusion"]
 	path = external/guided-diffusion
 	url = https://github.com/openai/guided-diffusion.git

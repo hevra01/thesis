@@ -42,8 +42,10 @@ def main(cfg):
     # get the output path for saving densities
     output_path = cfg.experiment.output_path
 
+    register_path = cfg.experiment.register_path
+
     # Load the register token IDs
-    with open("all_registers_imagenet.json", "r") as f:
+    with open(register_path, "r") as f:
         all_token_ids = json.load(f)
 
     batch_size = dataloader.batch_size
@@ -52,6 +54,8 @@ def main(cfg):
     keep_k = cfg.experiment.keep_k  
 
     flextok.pipeline.count_decoder_params()  # Print decoder parameters 
+
+    hutchinson_samples = cfg.experiment.hutchinson_samples 
 
     
     for batch_idx, batch in enumerate(dataloader):
@@ -64,7 +68,7 @@ def main(cfg):
         start = time.time()
         imgs = batch[0].to(device)  # get the images without labels
         with get_bf16_context(enable_bf16):
-            yes = flextok.estimate_log_density(imgs, token_ids_list=token_ids_list)
+            yes = flextok.estimate_log_density(imgs, token_ids_list=token_ids_list, hutchinson_samples=hutchinson_samples)
         current_densities = [density.item() for density in yes]
         densities.extend(current_densities)
 

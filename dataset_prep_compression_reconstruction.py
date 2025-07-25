@@ -1,3 +1,4 @@
+import time
 import torch
 from flextok.flextok_wrapper import FlexTokFromHub
 from data.utils.dataloaders import get_imagenet_dataloader
@@ -59,18 +60,18 @@ def main(cfg):
     # Process each batch in the dataloader
     for batch_idx, (images, labels) in enumerate(sliced_loader, start=start_batch_idx):
         images = images.to(device)
-
+      
         # Tokenize the images
         with get_bf16_context(enable_bf16):
             tokens_list = model.tokenize(images)
-
+        
         images_unnorm = images * std + mean
-
+        
         # Compute reconstruction errors for different k values
         for k_keep in k_keep_list:
             # Keep only the first k tokens
             tokens_list_filtered = [t[:, :k_keep] for t in tokens_list]
-            
+
             # Detokenize to reconstruct images
             with get_bf16_context(enable_bf16):
                 reconstructed_imgs = model.detokenize(
@@ -79,7 +80,6 @@ def main(cfg):
                     guidance_scale=7.5,
                 )
             
-
             # Scale reconstructed images to [0, 1]
             reconstructed_imgs = (reconstructed_imgs.clamp(-1, 1) + 1) / 2
 
@@ -96,9 +96,9 @@ def main(cfg):
                     "vgg_error": loss_dict["VGGPerceptualLoss"][img_idx].item()
                 })
 
-            # Save after each batch (overwrite)
-            with open(output_path, "w") as f:
-                json.dump(reconstruction_errors, f)
+        # Save after each batch (overwrite)
+        with open(output_path, "w") as f:
+            json.dump(reconstruction_errors, f)
 
         print(f"Processed batch {batch_idx + 1}/{len(dataloader)}")
         
