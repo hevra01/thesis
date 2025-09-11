@@ -1,0 +1,5 @@
+defaults:
+  - /dataset: imageNet  # Use the ImageNet dataset configuration
+
+
+output_file: "heuristic_baseline/imageNet_edge_ratios/imageNet_edge_ratios.json"

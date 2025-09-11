@@ -1,4 +1,5 @@
 import itertools
+from pathlib import Path
 import torchvision.transforms as T
 from data.datasets.huggingface_dataset import HuggingFaceDataset
 from datasets import load_dataset
@@ -6,7 +7,9 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader, Dataset
 from dahuffman import HuffmanCodec
+from torchvision.datasets.folder import default_loader
 
+IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".pgm", ".tif", ".tiff", ".webp"}
 
 
 def get_mnist_dataloader(batch_size=120, split="test", flatten=False, class_filter=None):
@@ -31,9 +34,28 @@ def get_mnist_dataloader(batch_size=120, split="test", flatten=False, class_filt
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     return dataloader
 
+class FlatImageDataset(Dataset):
+    def __init__(self, root, transform=None):
+        self.root = Path(root)
+        self.transform = transform
+        self.paths = sorted(
+            p for p in self.root.iterdir()
+            if p.is_file() and p.suffix.lower() in IMG_EXTS
+        )
+        if not self.paths:
+            raise FileNotFoundError(f"No images found in {self.root}")
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        img = default_loader(str(self.paths[idx]))  # loads using PIL and handles grayscale/RGB
+        if self.transform:
+            img = self.transform(img)
+        return img, -1  # dummy label
 
 def get_imagenet_dataloader(
-    root="/BS/databases23/imagenet/original/",
+    root="/scratch/inf0/user/mparcham/ILSVRC2012",
     split="val",  # or "train"
     batch_size=64,
     image_size=256,
@@ -57,14 +79,23 @@ def get_imagenet_dataloader(
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    # Load dataset from disk
-    dataset = ImageFolder(root=f"{root}/{split}", transform=transform)
+    data_root = f"{root}/{split}"
+    has_class_subdirs = any(Path(data_root).glob("*/"))
 
-    # Optional class filter
-    if class_filter is not None:
-        class_to_idx = {v: k for k, v in dataset.class_to_idx.items()}
-        allowed_idxs = [class_to_idx[c] for c in class_filter if c in class_to_idx]
-        dataset.samples = [s for s in dataset.samples if s[1] in allowed_idxs]
+    if has_class_subdirs:
+        # Original behavior
+        dataset = ImageFolder(root=data_root, transform=transform)
+
+        # Optional class filter (only meaningful with class subdirs)
+        if class_filter is not None:
+            class_to_idx = {k: v for k, v in dataset.class_to_idx.items()}
+            allowed_idxs = {class_to_idx[c] for c in class_filter if c in class_to_idx}
+            dataset.samples = [s for s in dataset.samples if s[1] in allowed_idxs]
+    else:
+        # New: flat folder (no labels needed)
+        dataset = FlatImageDataset(root=data_root, transform=transform)
+        # Note: class_filter is ignored in this mode.
+
 
     # Wrap in DataLoader
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
