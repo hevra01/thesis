@@ -8,10 +8,19 @@ import json
 from itertools import islice
 import hydra
 import torch
+import os
+import wandb
+from omegaconf import OmegaConf
 from hydra.utils import instantiate
 
 @hydra.main(version_base=None, config_path="conf", config_name="prep_dataset_compression_reconstruction")
 def main(cfg):
+
+    # Initialize W&B and dump Hydra config
+    wandb.init(
+        project="dataset_prep",  
+        config=OmegaConf.to_container(cfg, resolve=True)
+    )
  
     # Set device
     device = torch.device(cfg.device)
@@ -100,7 +109,12 @@ def main(cfg):
         with open(output_path, "w") as f:
             json.dump(reconstruction_errors, f)
 
-        print(f"Processed batch {batch_idx + 1}/{len(dataloader)}")
+        wandb.log(
+            {
+                "progress/batch_idx": batch_idx + 1,   # current batch
+            },
+            step=batch_idx
+        )
         
     # Save reconstruction errors to a JSON file
     with open(output_path, "w") as f:
