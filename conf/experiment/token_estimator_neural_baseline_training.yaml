@@ -1,0 +1,21 @@
+defaults:
+  - /model: token_predictor_neural_baseline
+  - /dataset: imageNet
+
+
+optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.0001
+
+training:
+    num_epochs: 100
+    loss: 
+      _target_: reconstruction_loss.GaussianCrossEntropyLoss
+
+# this is for the main dataset that has the mse_errors, vgg_errors for all the images for different
+# values of k_values and the  bpp.
+reconstruction_dataset:
+  reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
+  batch_size: 32 # this is the batch size for the reconstruction dataset
+
+checkpoint_path: "neural_baseline/checkpoint/last.pt"

@@ -191,3 +191,38 @@ class ReconstructionDataset(Dataset):
             return self.codebook[register][1]  # Return the Huffman code string
         else:
             raise ValueError(f"Register ID {register} not found in the Huffman codebook.")
+        
+
+
+class ReconstructionDataset_token_based(Dataset):
+    def __init__(self, reconstruction_data, dataloader):
+        """
+        Args:
+            reconstruction_data (list): List of dicts containing reconstruction metrics.
+                (img, k_value, mse_error, vgg_error).
+            dataloader (DataLoader): Dataloader from which images can be fetched.
+        """
+        self.reconstruction_data = reconstruction_data
+        self.dataloader = dataloader    
+
+    def __len__(self):
+        # this will be the number of images * the number of k values for each image.
+        # e.g. for imagenet val, it is 50000 * len([1, 2, 4, 8, 16, 32, 64, 128, 180, 256]) = 500000
+        return len(self.reconstruction_data)
+
+    def __getitem__(self, idx):
+        """
+        Returns:
+            dict: Contains image ID, k value, MSE error, vgg error (or any other error) and compression rate.
+        """
+        data_point = self.reconstruction_data[idx]
+        image_id = data_point["image_id"]
+        k_value = data_point["k_value"]
+        vgg_error = data_point["vgg_error"]
+
+        return {
+            "image": self.dataloader.dataset[image_id][0],  # Get the image from the dataloader
+            "vgg_error": vgg_error,
+            "k_value": k_value
+        }
+    

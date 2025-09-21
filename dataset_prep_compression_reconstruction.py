@@ -16,9 +16,14 @@ from hydra.utils import instantiate
 @hydra.main(version_base=None, config_path="conf", config_name="prep_dataset_compression_reconstruction")
 def main(cfg):
 
+    # Check start_batch_idx and end_batch_idx 
+    start_batch_idx = cfg.experiment.start_batch_idx
+    end_batch_idx = cfg.experiment.end_batch_idx
+
     # Initialize W&B and dump Hydra config
     wandb.init(
-        project="dataset_prep",  
+        project="dataset_prep", 
+        name=f"prep_dataset_{start_batch_idx:04d}_{end_batch_idx:04d}", 
         config=OmegaConf.to_container(cfg, resolve=True)
     )
  
@@ -43,10 +48,6 @@ def main(cfg):
 
     # Compression rates to test
     k_keep_list = cfg.experiment.k_keep_list
-
-    # Check start_batch_idx and end_batch_idx 
-    start_batch_idx = cfg.experiment.start_batch_idx
-    end_batch_idx = cfg.experiment.end_batch_idx
 
     # Format output filename to include batch range
     base_output_path = cfg.experiment.output_path  
