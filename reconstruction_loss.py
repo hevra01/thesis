@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torchvision import models
 import torchvision.transforms.functional as TF
+import torch.nn.functional as F
+
 
 class VGGPerceptualLoss(nn.Module):
     """
@@ -195,3 +197,89 @@ def reconstructionLoss_vs_compressionRate(model, images, k_keep_list, loss_fns, 
         results[k_keep] = [loss_dict, reconst]
     
     return results
+
+
+class GaussianCrossEntropyLoss(nn.Module):
+    """
+    Distance-aware classification loss for ordinal targets in {1..C}.
+    Builds a Gaussian target distribution centered at the true count so
+    near misses are penalized far less than distant ones.
+
+    Args:
+        num_classes (int): number of classes (e.g., 256)
+        sigma (float): stddev of the Gaussian over class index space
+    """
+    def __init__(self, num_classes: int = 256, sigma: float = 2.0):
+        super().__init__()
+        self.num_classes = num_classes
+        self.sigma = float(sigma)
+
+
+    @torch.no_grad()
+    def _soft_targets(self, token_counts: torch.Tensor) -> torch.Tensor:
+        """
+        token_counts: [B] integer labels in [1..C], where B is the batch size.
+                      so token_count basically holds the true number of tokens 
+                      used for reconstruction.
+
+        The aim is to turn these integer labels into soft targets.               
+        
+        
+        Broadcasting explanation:
+            - centers: [B,1] (true counts for each example)
+            - classes: [1,C] (all possible counts)
+            - classes - centers triggers broadcasting:
+                PyTorch automatically expands centers to [B,C] 
+                and classes to [B,C], then performs element-wise subtraction.
+        """
+
+        # Step 1: Convert labels to column vector [B,1] and float
+        centers = token_counts.view(-1, 1).float()  
+
+        # Step 2: Row vector of class indices [1,C]
+        # this is just all the possible classes/token counts
+        classes = torch.arange(1, self.num_classes + 1, device=token_counts.device).view(1, -1)  
+
+        # Step 3: Squared distance from true count (broadcasting happens here)
+        dist2 = (classes - centers).pow(2)  # shape [B,C] due to broadcasting
+
+        # Step 4: Convert distances to Gaussian logits
+        # Formula: exp(- (x - mu)^2 / (2*sigma^2)) in log-space
+        # logits are unnormalized scores: higher for classes closer to the true count
+        logits = -dist2 / (2.0 * self.sigma ** 2)
+
+        # Step 5: Convert logits to probabilities using softmax
+        # Softmax: P_i = exp(logit_i) / sum_j exp(logit_j)
+        # Ensures probabilities sum to 1 per row
+        # Closer classes have higher probabilities, distant classes have near-zero
+        targets = torch.softmax(logits, dim=1)
+
+        return targets
+
+
+    def forward(self, logits: torch.Tensor, counts: torch.Tensor) -> torch.Tensor:
+        """
+        Compute distance-aware cross-entropy loss using Gaussian soft targets.
+
+        Args:
+            logits: [B, C] raw class logits from the model, where B is batch size and C is num_classes
+            counts: [B] integer labels (token counts) in [1..C] 
+        
+        Returns:
+            scalar loss
+        """
+
+        # Step 1: Convert integer labels into Gaussian soft targets
+        # Each row is a probability distribution over classes
+        soft_t = self._soft_targets(counts)  # [B, C]
+
+        # Step 2: Convert model logits to log-probabilities
+        # log_softmax = log(softmax(logits))
+        # Using log directly is numerically more stable than log(softmax(logits))
+        log_p = F.log_softmax(logits, dim=1)  # [B, C]
+
+        # Step 3: Cross-entropy: -sum(target * log(predicted)) per example
+        loss = -(soft_t * log_p).sum(dim=1)  # [B]
+
+        # Step 4: Average over batch
+        return loss.mean()
