@@ -5,12 +5,12 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import wandb
-from data.utils.dataloaders import ReconstructionDataset_Neural
+from data.utils.dataloaders import ReconstructionDataset_Heuristic
 import json
 from hydra.utils import instantiate
 
 
-@hydra.main(version_base=None, config_path="../conf", config_name="neural_baseline_training")
+@hydra.main(version_base=None, config_path="../conf", config_name="heuristic_baseline_training")
 def main(cfg: DictConfig):
 
     # Device configuration
@@ -19,7 +19,7 @@ def main(cfg: DictConfig):
     # Initialize W&B and dump Hydra config
     wandb.init(
         project="dataset_prep", 
-        name=f"neural_baseline_training", 
+        name=f"heuristic_baseline_training", 
         config=OmegaConf.to_container(cfg, resolve=True)
     )
 
@@ -28,14 +28,20 @@ def main(cfg: DictConfig):
     with open(cfg.experiment.reconstruction_dataset.reconstruction_data_path, "r") as f:
         reconstruction_data = json.load(f)
 
+
+    # for the heuristic baseline we need the edge ratio information as a proxy for complexity
+    with open(cfg.experiment.reconstruction_dataset.edge_ratio_path, "r") as f:
+        edge_ratio_information = json.load(f)
+
     # this is just to get the images from the dataloader to be used by ReconstructionDataset
-    # we will need them for the compression_rate_predictor which will get the latents of the images to make bpp predictions. 
+    # we will need them for the compression_rate_predictor which will get the latents of the images to make bpp predictions.
     dataloader = instantiate(cfg.experiment.dataset)
 
     # This dataset holds the mse_errors, vgg_errors for all the images for different 
     # values of k_values and the  bpp.
-    recon_dataset = ReconstructionDataset_Neural(
+    recon_dataset = ReconstructionDataset_Heuristic(
         reconstruction_data=reconstruction_data,
+        edge_ratio_information=edge_ratio_information,
         dataloader=dataloader,
     )
 
@@ -47,7 +53,7 @@ def main(cfg: DictConfig):
     # ---------------------------
     token_count_predictor = instantiate(cfg.experiment.model).to(device)
     optimizer = instantiate(cfg.experiment.optimizer, params=token_count_predictor.parameters())
-    cross_entropy_loss = instantiate(cfg.experiment.training.loss)
+    mse_loss = instantiate(cfg.experiment.training.loss)
 
     # ---------------------------
     # SIMPLE CHECKPOINT RESUME
@@ -85,17 +91,17 @@ def main(cfg: DictConfig):
         token_count_predictor.train()
 
         for batch in recon_dataloader:
-            images = batch["image"].to(device).float()
             vgg_error = batch["vgg_error"].to(device).float().unsqueeze(1)
-            k_value = batch["k_value"].to(device).float()  # keep as-is if your loss handles mapping
+            true_token_count = batch["k_value"].to(device).float()  # keep as-is if your loss handles mapping
 
             optimizer.zero_grad()
+            edge_ratio = batch["edge_ratio"].to(device).float().unsqueeze(1)
 
             # Forward: model returns logits [B, 256] (classes 0..255 ↔ counts 1..256)
-            logits = token_count_predictor(images, vgg_error)
+            token_count_prediction = token_count_predictor(edge_ratio, vgg_error)
 
             # Loss with Gaussian soft targets (your custom CE-style loss)
-            loss = cross_entropy_loss(logits, k_value)
+            loss = mse_loss(token_count_prediction, true_token_count)
 
             loss.backward()
             optimizer.step()

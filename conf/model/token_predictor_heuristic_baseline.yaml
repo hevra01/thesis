@@ -1,0 +1,12 @@
+# conf/model/token_count_predictor.yaml
+_target_: models.heuristic_token_count_predictor.HeuristicTokenCountPredictor
+
+
+
+# --- Conditioning vector ---
+loss_dim: 1                 # tolerated loss is a single scalar; increase if you add more features
+
+# --- MLP design ---
+hidden_dims: []  # make [] to use a single Linear(in_dim -> num_classes)
+activation: gelu                  # relu | gelu | silu | tanh
+dropout: 0.1

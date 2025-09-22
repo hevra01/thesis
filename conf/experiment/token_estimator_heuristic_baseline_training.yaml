@@ -1,5 +1,5 @@
 defaults:
-  - /model: token_predictor_neural_baseline
+  - /model: token_predictor_heuristic_baseline
   - /dataset: imageNet
 
 
@@ -10,12 +10,13 @@ optimizer:
 training:
     num_epochs: 100
     loss: 
-      _target_: reconstruction_loss.GaussianCrossEntropyLoss
+      _target_: reconstruction_loss.MSELoss
 
 # this is for the main dataset that has the mse_errors, vgg_errors for all the images for different
 # values of k_values and the  bpp.
 reconstruction_dataset:
-  reconstruction_data_path: "/BS/data_mani_compress/work/thesis/thesis/reconstruction_errors.json"
+  reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
+  edge_ratio_path: "data/datasets/imageNet_edge_ratios/val_imageNet_edge_ratios.json"
   batch_size: 32 # this is the batch size for the reconstruction dataset
 
-checkpoint_path: "neural_baseline/checkpoint/last.pt"
+checkpoint_path: "heuristic_baseline/checkpoint/last.pt"

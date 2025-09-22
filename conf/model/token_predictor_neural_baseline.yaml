@@ -1,5 +1,5 @@
 # conf/model/token_count_predictor.yaml
-_target_: models.token_count_predictor.TokenCountPredictor
+_target_: models.neural_token_count_predictor.NeuralTokenCountPredictor
 
 # --- VAE ---
 hf_hub_path: stabilityai/sd-vae-ft-mse

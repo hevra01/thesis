@@ -9,8 +9,6 @@ from skimage import io, color, feature
 import matplotlib.pyplot as plt
 
 
-
-
 def compute_edge_ratio(image):
 
     # --- Compute edges using Canny edge detector ---
