@@ -19,7 +19,7 @@ def main(cfg: DictConfig):
     # Initialize W&B and dump Hydra config
     wandb.init(
         project="dataset_prep", 
-        name=f"heuristic_baseline_training", 
+        name=f"trainset_heuristic_baseline_training", 
         config=OmegaConf.to_container(cfg, resolve=True)
     )
 
@@ -41,8 +41,7 @@ def main(cfg: DictConfig):
     # values of k_values and the  bpp.
     recon_dataset = ReconstructionDataset_Heuristic(
         reconstruction_data=reconstruction_data,
-        edge_ratio_information=edge_ratio_information,
-        dataloader=dataloader,
+        edge_ratio_information=edge_ratio_information
     )
 
     # Convert recon_dataset into a DataLoader
@@ -53,7 +52,7 @@ def main(cfg: DictConfig):
     # ---------------------------
     token_count_predictor = instantiate(cfg.experiment.model).to(device)
     optimizer = instantiate(cfg.experiment.optimizer, params=token_count_predictor.parameters())
-    mse_loss = instantiate(cfg.experiment.training.loss)
+    loss = instantiate(cfg.experiment.training.loss)
 
     # ---------------------------
     # SIMPLE CHECKPOINT RESUME
@@ -101,12 +100,12 @@ def main(cfg: DictConfig):
             token_count_prediction = token_count_predictor(edge_ratio, vgg_error)
 
             # Loss with Gaussian soft targets (your custom CE-style loss)
-            loss = mse_loss(token_count_prediction, true_token_count)
+            current_loss = loss(token_count_prediction, true_token_count).mean()
 
-            loss.backward()
+            current_loss.backward()
             optimizer.step()
 
-            epoch_loss += float(loss.item())
+            epoch_loss += float(current_loss.item())
 
         avg_loss = epoch_loss / max(1, len(recon_dataloader))
         print(f"Epoch {epoch + 1}/{num_epochs}, Avg Loss: {avg_loss:.6f}")

@@ -91,23 +91,27 @@ class MSELoss:
 
 
 class MAELoss:
-    def __call__(self, reconstructed_img, original_img):
+    def __call__(self, pred, target):
         """
-        Compute Mean Absolute Error (MAE) between two tensors.
+        Mean Absolute Error between pred and target.
 
-        If the images have range of [0,1], then the MAE will have a range of [0,1] as well.
-        However, if the images are in the range of [0, 255], then the MAE will be in the range of [0, 255].
-
-        Args:
-            reconstructed_img: torch.Tensor with any shape (e.g., [B, C, H, W])
-            original_img: torch.Tensor of the same shape
-
-        Returns:
-            torch.Tensor: scalar loss (averaged over all elements)
+        - Supports scalars (no batch) or batched tensors ([B, ...]).
+        - Returns a scalar: average error across batch and all dimensions.
         """
-        # Compute absolute differences
-        mae_per_image = torch.abs(reconstructed_img - original_img).mean(dim=[1, 2, 3])  # → shape: [B]
-        return mae_per_image
+        if pred.shape != target.shape:
+            raise ValueError(
+                f"Shape mismatch: pred {pred.shape} vs target {target.shape}"
+            )
+
+        # absolute error per sample
+        per_sample = torch.abs(pred - target)
+
+        # average over all non-batch dimensions
+        if per_sample.ndim > 1:
+            per_sample = per_sample.view(per_sample.size(0), -1).mean(dim=1)
+
+        # now reduce across batch (or just return scalar if no batch)
+        return per_sample.mean()
 
 def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights=None):
     """
@@ -204,6 +208,14 @@ class GaussianCrossEntropyLoss(nn.Module):
     Distance-aware classification loss for ordinal targets in {1..C}.
     Builds a Gaussian target distribution centered at the true count so
     near misses are penalized far less than distant ones.
+
+    1) Target class (e.g. 50) => Ground-truth label is just a single integer.
+    2) Compute squared distance => Purpose: quantify how far every possible class is from the true one. Small = close, big = far.
+    3) Apply Gaussian kernel = Purpose: convert “distance” into a score that decays smoothly with distance.
+        Negative sign → close classes get larger scores, far classes get smaller.
+        sigma controls how wide the “tolerance zone” is.
+    4) Softmax over logits => Purpose: turn scores into a valid probability distribution (sums to 1). 
+       Classes near the true one get higher probability; far ones get near-zero.
 
     Args:
         num_classes (int): number of classes (e.g., 256)

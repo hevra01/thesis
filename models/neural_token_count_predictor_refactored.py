@@ -43,6 +43,8 @@ class NeuralTokenCountPredictor(nn.Module):
     """
     def __init__(
         self,
+        apply_VAE_encoder: bool = False,               # whether to use the VAE encoder
+        head: str = "classification",            # "classification" | "regression"
         hf_hub_path: str = "stabilityai/sd-vae-ft-mse",  # pretrained VAE
         freeze_vae: bool = True,                         # freeze encoder weights
         num_classes: int = 256,                          # classification target size
@@ -56,36 +58,43 @@ class NeuralTokenCountPredictor(nn.Module):
         conv_strides:  List[int] = (1,   2,   2,   1),   # stride for each conv
         norm: str = "group",                             # group | batch | none
         num_groups: int = 8,                             # groups for GroupNorm
-        conv_activation: str = "silu",                   # activation after conv
+        activation: str = "silu",                   # activation after conv
         dropout2d: float = 0.10,                         # spatial dropout prob
         post_conv_pool: str = "none",                    # "none" (flatten) | "gap"
 
         # --- fc head ---
         fc_hidden: List[int] = (512, 256),               # MLP hidden sizes
-        fc_activation: str = "silu",                     # activation after FC layers
-        fc_dropout: float = 0.10,                        # dropout in FC layers
         device: str = "cuda"                            # device to run on
     ):
         super().__init__()
 
         self.device = device
+        self.head_type = head.lower()
+        self.apply_VAE_encoder = apply_VAE_encoder
 
-        # ---- 1. VAE encoder (latent extractor) ----
-        self.vae = AutoencoderKL.from_pretrained(hf_hub_path, low_cpu_mem_usage=False)
-        if freeze_vae:
-            for p in self.vae.parameters():
-                p.requires_grad = False
-            self.vae.eval()  # avoid updating stats
+        if self.apply_VAE_encoder:
+            print("Using VAE encoder for image feature extraction.")
+
+            # ---- 1. VAE encoder (latent extractor) ----
+            self.vae = AutoencoderKL.from_pretrained(hf_hub_path, low_cpu_mem_usage=False)
+            if freeze_vae:
+                for p in self.vae.parameters():
+                    p.requires_grad = False
+                self.vae.eval()  # avoid updating stats
+            
+            latent_ch = getattr(self.vae.config, "latent_channels", 4)  # default for SD
+            c_in = latent_ch
+        else:
+            print("Skipping VAE encoder; using raw images as input.")
+            c_in = 3  # RGB images
 
         self.num_classes = num_classes
         self.post_conv_pool = post_conv_pool.lower()
         assert self.post_conv_pool in {"none", "gap"}, "pool must be 'none' or 'gap'"
 
         # ---- 2. Convolutional head ----
-        latent_ch = getattr(self.vae.config, "latent_channels", 4)  # default for SD
-        c_in = latent_ch
         blocks = []
-        act_conv = make_act(conv_activation)
+        act_conv = make_act(activation)
 
         for c_out, s in zip(conv_channels, conv_strides):
             # Each block = Conv → Norm → Activation (+ optional dropout)
@@ -104,18 +113,18 @@ class NeuralTokenCountPredictor(nn.Module):
         # ---- 3. Conditioning projection ----
         self.loss_proj = nn.Sequential(
             nn.Linear(loss_dim, loss_proj_dim),
-            make_act(fc_activation),
-            nn.Dropout(fc_dropout) if fc_dropout > 0 else nn.Identity(),
+            make_act(activation),
+            nn.Dropout(dropout2d) if dropout2d > 0 else nn.Identity(),
         )
 
-        # ---- 4. Fully-connected classifier head (lazy init) ----
+        # ---- 4. Fully-connected head (lazy init) ----
         # We can’t build it until we know the conv output size,
         # so we initialize as None and build it after the first forward pass.
         self.fc_hidden = list(fc_hidden)
-        self.fc_activation = fc_activation
-        self.fc_dropout = fc_dropout
+        self.fc_activation = activation
+        self.fc_dropout = dropout2d
         self.loss_proj_dim = loss_proj_dim
-        self.classifier: Optional[nn.Sequential] = None
+        self.head: Optional[nn.Sequential] = None
 
     @torch.no_grad()
     def _encode_latents(self, images: torch.Tensor) -> torch.Tensor:
@@ -127,9 +136,9 @@ class NeuralTokenCountPredictor(nn.Module):
         posterior = self.vae.encode(images).latent_dist
         return posterior.mode()  # deterministic (mean of distribution)
 
-    def _build_classifier(self, feat_dim: int):
+    def _build_head(self, feat_dim: int):
         """
-        Build the FC classifier dynamically once we know conv output size.
+        Build the FC head dynamically once we know conv output size.
         """
         layers = []
         in_dim = feat_dim + self.loss_proj_dim
@@ -141,9 +150,18 @@ class NeuralTokenCountPredictor(nn.Module):
                 layers += [nn.Dropout(self.fc_dropout)]
             in_dim = h
 
-        # Final linear → num_classes logits
-        layers += [nn.Linear(in_dim, self.num_classes)]
-        self.classifier = nn.Sequential(*layers).to(self.device)
+        # --- Final linear depends on head type ---
+
+        if self.head_type == "classification":
+            # logits: no activation
+            layers += [nn.Linear(in_dim, self.num_classes)]
+        else:
+            # regression to [0,1]
+            layers += [nn.Linear(in_dim, 1)]
+            layers += [nn.Sigmoid()]  # guarantees output in [0,1]
+
+        self.head = nn.Sequential(*layers).to(self.device)
+
 
     def forward(self, images: torch.Tensor, tolerated_loss: torch.Tensor) -> torch.Tensor:
         """
@@ -163,8 +181,15 @@ class NeuralTokenCountPredictor(nn.Module):
         if tolerated_loss.dim() == 1:
             tolerated_loss = tolerated_loss.unsqueeze(1)
 
-        latents = self._encode_latents(images)        # [B, C, H/8, W/8]
-        feats = self.conv(latents)                    # conv head output
+        # Going through the backbone:
+
+        # check if we are applying the VAE encoder
+        if self.apply_VAE_encoder:
+            cnn_input = self._encode_latents(images)        # [B, C, H/8, W/8]
+        else:
+            cnn_input = images                              # [B, 3, H, W]
+
+        feats = self.conv(cnn_input)                    # conv head output
 
         if self.post_conv_pool == "gap":
             feats = feats.mean(dim=(2, 3))            # [B, C]
@@ -172,13 +197,13 @@ class NeuralTokenCountPredictor(nn.Module):
             feats = self.flatten(feats)               # [B, C*H*W]
 
         # Build FC head on the fly the first time
-        if self.classifier is None:
-            self._build_classifier(feats.size(1))
+        if self.head is None:
+            self._build_head(feats.size(1))
 
         loss_emb = self.loss_proj(tolerated_loss)     # [B, loss_proj_dim]
         x = torch.cat([feats, loss_emb], dim=1)       # [B, feat_dim+loss_proj_dim]
-        logits = self.classifier(x)                   # [B, num_classes]
-        return logits
+        out = self.head(x)                   # [B, num_classes]
+        return out
 
     @staticmethod
     def logits_to_token_count(logits: torch.Tensor) -> torch.Tensor:

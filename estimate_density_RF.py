@@ -2,10 +2,12 @@ import json
 import time
 from experiments.image.model.dense_flow import DenseFlow
 import hydra
+from omegaconf import OmegaConf
 import torch
 from torchvision.transforms.functional import to_pil_image, to_tensor
 from PIL import Image
 from hydra.utils import instantiate
+import wandb
 from flextok.utils.misc import detect_bf16_support, get_bf16_context
 
 
@@ -23,6 +25,14 @@ def resize_with_box(tensor_batch, size=(64, 64)):
 @hydra.main(version_base=None, config_path="conf", config_name="estimate_density")
 def main(cfg):
     device = cfg.device
+
+    # Initialize W&B and dump Hydra config
+    wandb.init(
+        project="dataset_prep", 
+        name=f"density_estimation_RF", 
+        config=OmegaConf.to_container(cfg, resolve=True)
+    )
+
     
     # instantiate the data loader
     dataloader = instantiate(cfg.experiment.dataset)
@@ -37,6 +47,7 @@ def main(cfg):
 
     # go over the imagenet dataset and estimate the density of the first num_images
     densities = []
+    #divergences = []
 
 
     # get the output path for saving densities
@@ -68,14 +79,21 @@ def main(cfg):
         start = time.time()
         imgs = batch[0].to(device)  # get the images without labels
         with get_bf16_context(enable_bf16):
-            yes = flextok.estimate_log_density(imgs, token_ids_list=token_ids_list, hutchinson_samples=hutchinson_samples)
-        current_densities = [density.item() for density in yes]
+            current_densities = flextok.estimate_log_density(imgs, token_ids_list=token_ids_list, hutchinson_samples=hutchinson_samples)
+        current_densities = [density.item() for density in current_densities]
+        #current_divergences = [div.item() for div in no]
         densities.extend(current_densities)
+        #divergences.extend(current_divergences)
 
         # Save the estimated densities to a file
         with open(output_path, "w") as f:
             json.dump(densities, f)
-        print(f"Processed batch in {time.time() - start:.2f} seconds. Current densities: {current_densities}")  
+        print(f"Processed batch in {time.time() - start:.2f} seconds.")  
+
+        # Save the estimated divergences to a file
+        # with open(output_path+"_divergences.json", "w") as f:
+        #     json.dump(divergences, f)
+        #     print(f"Processed batch in {time.time() - start:.2f} seconds. Current divergences: {current_divergences}")
 
 
 if __name__ == "__main__":

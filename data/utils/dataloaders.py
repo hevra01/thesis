@@ -102,6 +102,8 @@ def get_imagenet_dataloader(
     return dataloader
 
 class ReconstructionDataset(Dataset):
+    """
+    Dataset for reconstruction metrics, including Huffman coding based compression rates."""
     def __init__(self, reconstruction_data, all_registers, num_pixels, dataloader):
         """
         Args:
@@ -194,7 +196,7 @@ class ReconstructionDataset(Dataset):
         
 
 
-class ReconstructionDataset_token_based(Dataset):
+class ReconstructionDataset_Neural(Dataset):
     def __init__(self, reconstruction_data, dataloader):
         """
         Args:
@@ -203,7 +205,7 @@ class ReconstructionDataset_token_based(Dataset):
             dataloader (DataLoader): Dataloader from which images can be fetched.
         """
         self.reconstruction_data = reconstruction_data
-        self.dataloader = dataloader    
+        self.dataloader = dataloader
 
     def __len__(self):
         # this will be the number of images * the number of k values for each image.
@@ -226,3 +228,39 @@ class ReconstructionDataset_token_based(Dataset):
             "k_value": k_value
         }
     
+class ReconstructionDataset_Heuristic(Dataset):
+    """
+    this is different from ReconstructionDataset_token_based in the sense that this also has the edge information.
+    """
+    def __init__(self, reconstruction_data, edge_ratio_information):
+        """
+        Args:
+            reconstruction_data (list): List of dicts containing reconstruction metrics.
+                (img, k_value, mse_error, vgg_error).
+            edge_ratio_information (list): List of edge ratio information for each image.
+            dataloader (DataLoader): Dataloader from which images can be fetched.
+        """
+        self.reconstruction_data = reconstruction_data
+        self.edge_ratio_information = edge_ratio_information
+
+    def __len__(self):
+        # this will be the number of images * the number of k values for each image.
+        # e.g. for imagenet val, it is 50000 * len([1, 2, 4, 8, 16, 32, 64, 128, 180, 256]) = 500000
+        return len(self.reconstruction_data)
+
+    def __getitem__(self, idx):
+        """
+        Returns:
+            dict: Contains image ID, k value, MSE error, vgg error (or any other error) and compression rate.
+        """
+        data_point = self.reconstruction_data[idx]
+        k_value = data_point["k_value"]
+        vgg_error = data_point["vgg_error"]
+        image_id = data_point["image_id"]
+        edge_ratio = self.edge_ratio_information[image_id]  # get the edge ratio for this image
+
+        return {
+            "vgg_error": vgg_error,
+            "k_value": k_value,
+            "edge_ratio": edge_ratio 
+        }
