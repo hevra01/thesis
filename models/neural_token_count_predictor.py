@@ -2,6 +2,15 @@ import torch
 import torch.nn as nn
 from diffusers import AutoencoderKL
 from typing import List, Optional
+from transformers import CLIPModel
+from torchvision.models import resnet18, resnet34, resnet50, ResNet18_Weights, ResNet34_Weights, ResNet50_Weights
+from torchvision.models.feature_extraction import create_feature_extractor
+
+RESNET_FACTORIES = {
+    "resnet18":  (resnet18,  ResNet18_Weights.DEFAULT),
+    "resnet34":  (resnet34,  ResNet34_Weights.DEFAULT),
+    "resnet50":  (resnet50,  ResNet50_Weights.DEFAULT),
+}
 
 # --- Helper functions for activations and normalizations ---
 def make_act(name: str) -> nn.Module:
@@ -43,9 +52,22 @@ class NeuralTokenCountPredictor(nn.Module):
     """
     def __init__(
         self,
+        backbone_type: str = "resnet",               # backbone for feature extraction: "sd-vae" | "resnet" | "none"
+        
         hf_hub_path: str = "stabilityai/sd-vae-ft-mse",  # pretrained VAE
         freeze_vae: bool = True,                         # freeze encoder weights
-        num_classes: int = 256,                          # classification target size
+        
+        resnet_name="resnet18", # resnet model
+        resnet_layer="layer2", # layer to extract features from
+        resnet_feature_dim=128, # feature dimension of the extracted layer
+        resnet_pretrained=True,
+
+        clip_model_name: str = "openai/clip-vit-base-patch32", # CLIP model name (if used)
+        clip_feature_dim: int = 512,  # CLIP feature dimension 
+        clip_pretrained: bool = True,  # whether to use pretrained CLIP model
+
+        head: str = "regression",            # "classification" | "regression"
+        num_classes: int = 256,                 # classification target size
 
         # --- conditioning vector ---
         loss_dim: int = 1,       # e.g. tolerated loss (scalar)
@@ -56,36 +78,61 @@ class NeuralTokenCountPredictor(nn.Module):
         conv_strides:  List[int] = (1,   2,   2,   1),   # stride for each conv
         norm: str = "group",                             # group | batch | none
         num_groups: int = 8,                             # groups for GroupNorm
-        conv_activation: str = "silu",                   # activation after conv
+        activation: str = "silu",                   # activation after conv
         dropout2d: float = 0.10,                         # spatial dropout prob
         post_conv_pool: str = "none",                    # "none" (flatten) | "gap"
 
         # --- fc head ---
         fc_hidden: List[int] = (512, 256),               # MLP hidden sizes
-        fc_activation: str = "silu",                     # activation after FC layers
-        fc_dropout: float = 0.10,                        # dropout in FC layers
         device: str = "cuda"                            # device to run on
     ):
         super().__init__()
 
         self.device = device
+        self.head_type = head.lower()
+        self.backbone_type = backbone_type.lower()
 
-        # ---- 1. VAE encoder (latent extractor) ----
-        self.vae = AutoencoderKL.from_pretrained(hf_hub_path, low_cpu_mem_usage=False)
-        if freeze_vae:
-            for p in self.vae.parameters():
-                p.requires_grad = False
-            self.vae.eval()  # avoid updating stats
+
+        # set the backbone accordingly
+        if self.backbone_type == "sd-vae":
+            print("Using VAE encoder for image feature extraction.")
+            # ---- 1. VAE encoder (latent extractor) ----
+            self.backbone = AutoencoderKL.from_pretrained(hf_hub_path, low_cpu_mem_usage=False)
+            if freeze_vae:
+                for p in self.backbone.parameters():
+                    p.requires_grad = False
+                self.backbone.eval()  # avoid updating stats
+    
+            latent_ch = getattr(self.backbone.config, "latent_channels", 4)  # default for SD
+            c_in = latent_ch
+        elif self.backbone_type == "resnet":
+            # build a feature extractor that returns a chosen internal layer
+            factory, weights = RESNET_FACTORIES[resnet_name]
+            model = factory(weights=weights if resnet_pretrained else None)
+            model.eval()
+            self.backbone = create_feature_extractor(model, return_nodes={resnet_layer: "feat"})
+            c_in = resnet_feature_dim
+        elif self.backbone_type == "clip":
+            print(f"Using CLIP ({clip_model_name}) for image feature extraction.")
+    
+            self.backbone = CLIPModel.from_pretrained(clip_model_name)
+            if not clip_pretrained:
+                print("Warning: CLIP without pretrained weights is unusual.")
+            
+            # CLIP encoders output a pooled embedding (batch_size, feature_dim)
+            c_in = self.backbone.visual_projection.out_features  # e.g., 512 or 768
+
+        else:
+            print("Skipping VAE encoder & resnet; using raw images as input.")
+            c_in = 3  # RGB images
 
         self.num_classes = num_classes
         self.post_conv_pool = post_conv_pool.lower()
         assert self.post_conv_pool in {"none", "gap"}, "pool must be 'none' or 'gap'"
 
         # ---- 2. Convolutional head ----
-        latent_ch = getattr(self.vae.config, "latent_channels", 4)  # default for SD
-        c_in = latent_ch
         blocks = []
-        act_conv = make_act(conv_activation)
+        act_conv = make_act(activation)
 
         for c_out, s in zip(conv_channels, conv_strides):
             # Each block = Conv → Norm → Activation (+ optional dropout)
@@ -104,32 +151,22 @@ class NeuralTokenCountPredictor(nn.Module):
         # ---- 3. Conditioning projection ----
         self.loss_proj = nn.Sequential(
             nn.Linear(loss_dim, loss_proj_dim),
-            make_act(fc_activation),
-            nn.Dropout(fc_dropout) if fc_dropout > 0 else nn.Identity(),
+            make_act(activation),
+            nn.Dropout(dropout2d) if dropout2d > 0 else nn.Identity(),
         )
 
-        # ---- 4. Fully-connected classifier head (lazy init) ----
+        # ---- 4. Fully-connected head (lazy init) ----
         # We can’t build it until we know the conv output size,
         # so we initialize as None and build it after the first forward pass.
         self.fc_hidden = list(fc_hidden)
-        self.fc_activation = fc_activation
-        self.fc_dropout = fc_dropout
+        self.fc_activation = activation
+        self.fc_dropout = dropout2d
         self.loss_proj_dim = loss_proj_dim
-        self.classifier: Optional[nn.Sequential] = None
+        self.head: Optional[nn.Sequential] = None
 
-    @torch.no_grad()
-    def _encode_latents(self, images: torch.Tensor) -> torch.Tensor:
+    def _build_head(self, feat_dim: int):
         """
-        Encode images into latents using the frozen VAE.
-        Input:  images [B, 3, H, W] in [-1,1]
-        Output: latents [B, C, H/8, W/8] (C≈4 for SD)
-        """
-        posterior = self.vae.encode(images).latent_dist
-        return posterior.mode()  # deterministic (mean of distribution)
-
-    def _build_classifier(self, feat_dim: int):
-        """
-        Build the FC classifier dynamically once we know conv output size.
+        Build the FC head dynamically once we know conv output size.
         """
         layers = []
         in_dim = feat_dim + self.loss_proj_dim
@@ -141,9 +178,33 @@ class NeuralTokenCountPredictor(nn.Module):
                 layers += [nn.Dropout(self.fc_dropout)]
             in_dim = h
 
-        # Final linear → num_classes logits
-        layers += [nn.Linear(in_dim, self.num_classes)]
-        self.classifier = nn.Sequential(*layers).to(self.device)
+        # --- Final linear depends on head type ---
+
+        if self.head_type == "classification":
+            # logits: no activation
+            layers += [nn.Linear(in_dim, self.num_classes)]
+        else:
+            # regression to [0,1]
+            layers += [nn.Linear(in_dim, 1)]
+            layers += [nn.Sigmoid()]  # guarantees output in [0,1]
+
+        self.head = nn.Sequential(*layers).to(self.device)
+
+    @torch.no_grad()
+    def _extract_feature_map(self, images: torch.Tensor) -> torch.Tensor:
+        """
+        Extract feature map from the backbone.
+        Input:  images [B, 3, H, W] in [-1,1]
+        Output: features [B, C, H', W']
+        """
+        if self.backbone_type == "sd-vae":
+            posterior = self.backbone.encode(images).latent_dist
+            return posterior.mode()  # deterministic (mean of distribution)
+        elif self.backbone_type == "resnet":
+            return self.backbone(images)["feat"]       # [B, C, H', W']
+        else:
+            return images                              # [B, 3, H, W]
+
 
     def forward(self, images: torch.Tensor, tolerated_loss: torch.Tensor) -> torch.Tensor:
         """
@@ -163,8 +224,10 @@ class NeuralTokenCountPredictor(nn.Module):
         if tolerated_loss.dim() == 1:
             tolerated_loss = tolerated_loss.unsqueeze(1)
 
-        latents = self._encode_latents(images)        # [B, C, H/8, W/8]
-        feats = self.conv(latents)                    # conv head output
+        # Going through the backbone:
+        cnn_input = self._extract_feature_map(images)  # [B, C, H', W']
+
+        feats = self.conv(cnn_input)                    # conv head output
 
         if self.post_conv_pool == "gap":
             feats = feats.mean(dim=(2, 3))            # [B, C]
@@ -172,13 +235,13 @@ class NeuralTokenCountPredictor(nn.Module):
             feats = self.flatten(feats)               # [B, C*H*W]
 
         # Build FC head on the fly the first time
-        if self.classifier is None:
-            self._build_classifier(feats.size(1))
+        if self.head is None:
+            self._build_head(feats.size(1))
 
         loss_emb = self.loss_proj(tolerated_loss)     # [B, loss_proj_dim]
         x = torch.cat([feats, loss_emb], dim=1)       # [B, feat_dim+loss_proj_dim]
-        logits = self.classifier(x)                   # [B, num_classes]
-        return logits
+        out = self.head(x)                   # [B, num_classes]
+        return out
 
     @staticmethod
     def logits_to_token_count(logits: torch.Tensor) -> torch.Tensor:

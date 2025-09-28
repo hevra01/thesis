@@ -34,4 +34,4 @@ __pycache__/
 .wandb_secrets.sh
 
 # ignore all checkpoint folders
-checkpoints/
+**/checkpoints/
