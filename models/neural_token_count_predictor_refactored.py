@@ -2,6 +2,15 @@ import torch
 import torch.nn as nn
 from diffusers import AutoencoderKL
 from typing import List, Optional
+from transformers import CLIPModel
+from torchvision.models import resnet18, resnet34, resnet50, ResNet18_Weights, ResNet34_Weights, ResNet50_Weights
+from torchvision.models.feature_extraction import create_feature_extractor
+
+RESNET_FACTORIES = {
+    "resnet18":  (resnet18,  ResNet18_Weights.DEFAULT),
+    "resnet34":  (resnet34,  ResNet34_Weights.DEFAULT),
+    "resnet50":  (resnet50,  ResNet50_Weights.DEFAULT),
+}
 
 # --- Helper functions for activations and normalizations ---
 def make_act(name: str) -> nn.Module:
@@ -43,11 +52,22 @@ class NeuralTokenCountPredictor(nn.Module):
     """
     def __init__(
         self,
-        apply_VAE_encoder: bool = False,               # whether to use the VAE encoder
-        head: str = "classification",            # "classification" | "regression"
+        backbone_type: str = "resnet",               # backbone for feature extraction: "sd-vae" | "resnet" | "none"
+        
         hf_hub_path: str = "stabilityai/sd-vae-ft-mse",  # pretrained VAE
         freeze_vae: bool = True,                         # freeze encoder weights
-        num_classes: int = 256,                          # classification target size
+        
+        resnet_name="resnet18", # resnet model
+        resnet_layer="layer2", # layer to extract features from
+        resnet_feature_dim=128, # feature dimension of the extracted layer
+        resnet_pretrained=True,
+
+        clip_model_name: str = "openai/clip-vit-base-patch32", # CLIP model name (if used)
+        clip_feature_dim: int = 512,  # CLIP feature dimension 
+        clip_pretrained: bool = True,  # whether to use pretrained CLIP model
+
+        head: str = "regression",            # "classification" | "regression"
+        num_classes: int = 256,                 # classification target size
 
         # --- conditioning vector ---
         loss_dim: int = 1,       # e.g. tolerated loss (scalar)
@@ -70,22 +90,40 @@ class NeuralTokenCountPredictor(nn.Module):
 
         self.device = device
         self.head_type = head.lower()
-        self.apply_VAE_encoder = apply_VAE_encoder
+        self.backbone_type = backbone_type.lower()
 
-        if self.apply_VAE_encoder:
+
+        # set the backbone accordingly
+        if self.backbone_type == "sd-vae":
             print("Using VAE encoder for image feature extraction.")
-
             # ---- 1. VAE encoder (latent extractor) ----
-            self.vae = AutoencoderKL.from_pretrained(hf_hub_path, low_cpu_mem_usage=False)
+            self.backbone = AutoencoderKL.from_pretrained(hf_hub_path, low_cpu_mem_usage=False)
             if freeze_vae:
-                for p in self.vae.parameters():
+                for p in self.backbone.parameters():
                     p.requires_grad = False
-                self.vae.eval()  # avoid updating stats
-            
-            latent_ch = getattr(self.vae.config, "latent_channels", 4)  # default for SD
+                self.backbone.eval()  # avoid updating stats
+    
+            latent_ch = getattr(self.backbone.config, "latent_channels", 4)  # default for SD
             c_in = latent_ch
+        elif self.backbone_type == "resnet":
+            # build a feature extractor that returns a chosen internal layer
+            factory, weights = RESNET_FACTORIES[resnet_name]
+            model = factory(weights=weights if resnet_pretrained else None)
+            model.eval()
+            self.backbone = create_feature_extractor(model, return_nodes={resnet_layer: "feat"})
+            c_in = resnet_feature_dim
+        elif self.backbone_type == "clip":
+            print(f"Using CLIP ({clip_model_name}) for image feature extraction.")
+    
+            self.backbone = CLIPModel.from_pretrained(clip_model_name)
+            if not clip_pretrained:
+                print("Warning: CLIP without pretrained weights is unusual.")
+            
+            # CLIP encoders output a pooled embedding (batch_size, feature_dim)
+            c_in = self.backbone.visual_projection.out_features  # e.g., 512 or 768
+
         else:
-            print("Skipping VAE encoder; using raw images as input.")
+            print("Skipping VAE encoder & resnet; using raw images as input.")
             c_in = 3  # RGB images
 
         self.num_classes = num_classes
@@ -126,16 +164,6 @@ class NeuralTokenCountPredictor(nn.Module):
         self.loss_proj_dim = loss_proj_dim
         self.head: Optional[nn.Sequential] = None
 
-    @torch.no_grad()
-    def _encode_latents(self, images: torch.Tensor) -> torch.Tensor:
-        """
-        Encode images into latents using the frozen VAE.
-        Input:  images [B, 3, H, W] in [-1,1]
-        Output: latents [B, C, H/8, W/8] (C≈4 for SD)
-        """
-        posterior = self.vae.encode(images).latent_dist
-        return posterior.mode()  # deterministic (mean of distribution)
-
     def _build_head(self, feat_dim: int):
         """
         Build the FC head dynamically once we know conv output size.
@@ -162,6 +190,21 @@ class NeuralTokenCountPredictor(nn.Module):
 
         self.head = nn.Sequential(*layers).to(self.device)
 
+    @torch.no_grad()
+    def _extract_feature_map(self, images: torch.Tensor) -> torch.Tensor:
+        """
+        Extract feature map from the backbone.
+        Input:  images [B, 3, H, W] in [-1,1]
+        Output: features [B, C, H', W']
+        """
+        if self.backbone_type == "sd-vae":
+            posterior = self.backbone.encode(images).latent_dist
+            return posterior.mode()  # deterministic (mean of distribution)
+        elif self.backbone_type == "resnet":
+            return self.backbone(images)["feat"]       # [B, C, H', W']
+        else:
+            return images                              # [B, 3, H, W]
+
 
     def forward(self, images: torch.Tensor, tolerated_loss: torch.Tensor) -> torch.Tensor:
         """
@@ -182,12 +225,7 @@ class NeuralTokenCountPredictor(nn.Module):
             tolerated_loss = tolerated_loss.unsqueeze(1)
 
         # Going through the backbone:
-
-        # check if we are applying the VAE encoder
-        if self.apply_VAE_encoder:
-            cnn_input = self._encode_latents(images)        # [B, C, H/8, W/8]
-        else:
-            cnn_input = images                              # [B, 3, H, W]
+        cnn_input = self._extract_feature_map(images)  # [B, C, H', W']
 
         feats = self.conv(cnn_input)                    # conv head output
 
