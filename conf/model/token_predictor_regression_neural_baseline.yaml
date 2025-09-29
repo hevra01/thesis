@@ -40,10 +40,11 @@ dropout2d: 0.10                            # dropout after conv blocks (2D)
 # Optional pooling after the conv stack:
 #   none  → keep spatial dims, then flatten
 #   gap   → global average pool to [B, C], skip flatten
-post_conv_pool: gap                       # none | gap
+post_conv_pool: none                       # none | gap
 
 
 # --- Conditioning vector (tolerated loss etc.) ---
+use_loss_condition: false
 loss_dim: 1                               # size of conditioning vector
 loss_proj_dim: 164                        # embed cond → this many dims
 

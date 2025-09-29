@@ -8,7 +8,7 @@ optimizer:
   lr: 0.0001
 
 training:
-    num_epochs: 200
+    num_epochs: 500
     loss_training: 
       _target_: reconstruction_loss.MAELoss
     loss_analysis: 
@@ -19,9 +19,23 @@ reconstruction_dataset:
   reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
   batch_size: 32 # this is the batch size for the reconstruction dataset
   shuffle: true
+  # Optional: filter samples by an error range to simplify training.
+  # Set 'key' to the metric to filter on (e.g., 'vgg_error' or 'mse_error').
+  # Set 'min'/'max' to numeric bounds (inclusive). Leave as null to disable.
+  filter:
+    key: "vgg_error"   # e.g., vgg_error | mse_error
+    min: 2.83040   # e.g., 0.30
+    max: 2.83640   # e.g., 0.35
 
-checkpoint_path: "neural_baseline/checkpoint/last_regression_loss_resnet_clip_test.pt"
+checkpoint_path: "neural_baseline/checkpoint/last_regression_loss_resnet_clip_single_recon2.pt"
 
 
+# different experiments might use different splits of the data
 dataset:
   split: "train"
+  transform_profile: "clip"  # 224 when using clip, 256 when using resnet
+
+
+# different experiments might use want to use loss conditioning or not
+model: 
+  use_loss_condition: false
