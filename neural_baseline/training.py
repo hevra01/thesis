@@ -19,7 +19,7 @@ def main(cfg: DictConfig):
     # Initialize W&B and dump Hydra config
     wandb.init(
         project="dataset_prep", 
-        name=f"CNN_neural_baseline_training_loss_regression_VAE", 
+        name=f"neural_baseline_clip_test", 
         config=OmegaConf.to_container(cfg, resolve=True)
     )
 
@@ -36,10 +36,24 @@ def main(cfg: DictConfig):
 
     # This dataset holds the mse_errors, vgg_errors for all the images for different 
     # values of k_values and the  bpp.
+    # Optional filtering to constrain error range (e.g., near-constant difficulty)
+    filt_cfg = getattr(cfg.experiment.reconstruction_dataset, "filter", "vgg_error")
+    if filt_cfg is not None:
+        filter_key = getattr(filt_cfg, "key", None)
+        min_error = getattr(filt_cfg, "min", None)
+        max_error = getattr(filt_cfg, "max", None)
+    else:
+        filter_key = min_error = max_error = None
+
     recon_dataset = ReconstructionDataset_Neural(
         reconstruction_data=reconstruction_data,
-        dataloader=dataloader
+        dataloader=dataloader,
+        filter_key=filter_key,
+        min_error=min_error,
+        max_error=max_error,
     )
+
+    #print(recon_dataset[:20])
 
     batch_size = cfg.experiment.reconstruction_dataset.batch_size
     
@@ -103,6 +117,18 @@ def main(cfg: DictConfig):
     print("len(recon_dataloader):", len(recon_dataloader))
     dataset_size = len(recon_dataloader.dataset)
     print("dataset_size:", dataset_size)
+
+    # Log filtering info if applied
+    if hasattr(recon_dataset, "filter_key") and recon_dataset.filter_key is not None:
+        print(f"Applied filtering on '{recon_dataset.filter_key}' in range {recon_dataset.filter_bounds}; kept {recon_dataset.num_kept}/{recon_dataset.num_original} samples (missing_key={recon_dataset.missing_key_count})")
+        wandb.log({
+            "filter/key": recon_dataset.filter_key,
+            "filter/min": recon_dataset.filter_bounds[0],
+            "filter/max": recon_dataset.filter_bounds[1],
+            "filter/kept": recon_dataset.num_kept,
+            "filter/original": recon_dataset.num_original,
+            "filter/missing_key": recon_dataset.missing_key_count,
+        })
     
     for epoch in range(start_epoch, num_epochs):
         epoch_loss = 0.0
@@ -111,8 +137,9 @@ def main(cfg: DictConfig):
         # Accumulators for epoch-wide MAE metrics
         total_mae_expected_sum = 0.0  # classification (expected-count)
         total_mae_argmax_sum = 0.0    # classification (argmax)
+        grad_norm_sampled = None
 
-        for batch in recon_dataloader:
+        for b_idx, batch in enumerate(recon_dataloader):
             images = batch["image"].to(device).float()
             vgg_error = batch["vgg_error"].to(device).float().unsqueeze(1)
             k_value = batch["k_value"].to(device).float().unsqueeze(1)  
@@ -128,16 +155,16 @@ def main(cfg: DictConfig):
                 # Scale target to [0,1]: y = (K-1)/(C-1)
                 y = (k_value - 1.0) / float(num_classes - 1)
 
-
                 # loss is MAE between model output and scaled target
                 # logits here are actually a scalar output [B,1]
                 loss = training_loss(logits, y)
 
                 # Use the model prediction (not the target!) to compute token-count MAE
-                pred_k = (logits * (num_classes - 1) + 1.0).round().clamp(1, num_classes)
+                pred_y = logits.clamp(0.0, 1.0)  # [B]
+                pred_k = (pred_y * (num_classes - 1) + 1.0).round().clamp(1, num_classes)
 
                 # Per-sample MAE and epoch accumulation
-                loss_analysis = mae_loss(pred_k, k_value)  
+                loss_analysis = mae_loss(pred_k, k_value)
 
             else:
                 # Your Gaussian-CE expects float K; keep as-is
@@ -161,12 +188,20 @@ def main(cfg: DictConfig):
 
             # Backprop + optimization step
             loss.backward()
+
+            # Sample gradient norm once per epoch (first batch after backward)
+            if grad_norm_sampled is None:
+                total_norm = 0.0
+                for p in token_count_predictor.parameters():
+                    if p.grad is not None:
+                        param_norm = p.grad.data.norm(2)
+                        total_norm += float(param_norm.item() ** 2)
+                grad_norm_sampled = (total_norm ** 0.5) if total_norm > 0 else 0.0
             optimizer.step()
 
             epoch_loss += float(loss.item())
             epoch_loss_analysis += float(loss_analysis.item())
 
-            print("loss:", float(loss.item()))
 
         # to find the average loss over an epoch, divide the accumulated loss by the number of batches.
         avg_loss = epoch_loss / len(recon_dataloader)
@@ -182,6 +217,8 @@ def main(cfg: DictConfig):
             "avg_loss": avg_loss,
             "avg_loss_analysis": avg_loss_analysis,
         }
+        if grad_norm_sampled is not None:
+            log_dict["grad_norm_sampled"] = float(grad_norm_sampled)
         # if total_samples > 0:
         #     if is_reg:
         #         log_dict.update({

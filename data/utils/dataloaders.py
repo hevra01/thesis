@@ -24,42 +24,31 @@ IMAGENET_STD  = [0.229, 0.224, 0.225]
 
 def build_imagenet_transform(
     profile: str = "imagenet",
-    image_size: int | None = None,
-    mean: list[float] | None = None,
-    std: list[float] | None = None,
 ):
     """
-    Build a torchvision transform pipeline for different backbones.
-    Profiles:
-      - "imagenet": default 256 crop, ImageNet mean/std.
-      - "clip": default 224 crop, CLIP mean/std.
-      - "sd_vae": default 256 crop, scale to [-1,1] (mean=0.5,std=0.5).
-    You can override image_size via arg if desired.
-    Optionally override normalization with custom mean/std (both required).
+    Build a torchvision transform pipeline for different backbones with fixed,
+    known sizes and normalizations to avoid config skew:
+      - "imagenet": 256 center-crop, ImageNet mean/std.
+      - "clip":     224 center-crop, CLIP mean/std.
+      - "sd_vae":   256 center-crop, scale to [-1,1] via mean=std=0.5.
+    For custom setups, pass a full `transform` to the dataloader instead.
     """
     profile = (profile or "imagenet").lower()
     if profile == "clip":
-        # CLIP also expects “statistically ~0 mean, ~1 std” — but with respect to its 
-        # training distribution, not ImageNet.
-        size = 224 if image_size is None else image_size
-        default_mean, default_std = CLIP_MEAN, CLIP_STD
+        size = 224
+        mean, std = CLIP_MEAN, CLIP_STD
     elif profile == "sd_vae":
-        # For SD-VAE, the constants (0.5, 0.5) are just a fixed linear transform, not statistics.
-        size = 256 if image_size is None else image_size
-        default_mean, default_std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
+        size = 256
+        mean, std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
     else:
-        # this is default for imagenet dataset
-        size = 256 if image_size is None else image_size
-        default_mean, default_std = IMAGENET_MEAN, IMAGENET_STD
-
-    use_mean = mean if mean is not None else default_mean
-    use_std  = std  if std  is not None else default_std
+        size = 256
+        mean, std = IMAGENET_MEAN, IMAGENET_STD
 
     return T.Compose([
         T.Resize(size),
         T.CenterCrop(size),
         T.ToTensor(),
-        T.Normalize(mean=use_mean, std=use_std),
+        T.Normalize(mean=mean, std=std),
     ])
 
 
@@ -109,29 +98,19 @@ def get_imagenet_dataloader(
     root="/scratch/inf0/user/mparcham/ILSVRC2012",
     split="val",  # or "train"
     batch_size=64,
-    image_size: int | None = None,
     class_filter=None,
     num_workers=64,
     shuffle=False,
     transform_profile: str = "imagenet",
     transform=None,
-    normalize_mean: list[float] | None = None,
-    normalize_std: list[float] | None = None,
 ):
-    """Flexible ImageNet loader with simple, config-friendly transforms.
-    - Set transform_profile to one of {"imagenet", "clip", "sd_vae"}.
-    - Optionally override image_size; if None, a sensible default per profile is used.
-    - Optionally override normalization mean/std.
+    """Flexible ImageNet loader with fixed, profile-based transforms.
+    - transform_profile in {"imagenet", "clip", "sd_vae"} selects size+normalization.
     - Or pass a ready-made `transform` to override everything.
     """
     # Build transform unless custom provided
     if transform is None:
-        transform = build_imagenet_transform(
-            profile=transform_profile,
-            image_size=image_size,
-            mean=normalize_mean,
-            std=normalize_std,
-        )
+        transform = build_imagenet_transform(profile=transform_profile)
 
     data_root = f"{root}/{split}"
     has_class_subdirs = any(Path(data_root).glob("*/"))

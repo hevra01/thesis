@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import warnings
 from diffusers import AutoencoderKL
 from typing import List, Optional
 from transformers import CLIPModel
@@ -39,16 +40,12 @@ def make_norm(kind: str, num_ch: int, num_groups: int = 8) -> nn.Module:
 
 class NeuralTokenCountPredictor(nn.Module):
     """
-    Predicts token count classes (1..num_classes) given:
-      - Image (encoded by SD VAE into latents).
-      - Auxiliary conditioning vector (e.g., tolerated loss).
+    Predicts the token count from an input image. Optionally conditions
+    on a user-specified tolerated reconstruction loss (a scalar per item).
 
-    Pipeline:
-      1. Encode input image into latents using SD VAE encoder.
-      2. Apply configurable CNN head (channels + strides) to latents.
-      3. Optionally apply GAP (global average pooling) or flatten to vector.
-      4. Project conditioning vector to embedding, concatenate with features.
-      5. Apply fully-connected head (MLP) → logits for classification.
+    If `use_loss_condition = True`, the forward pass expects `tolerated_loss`
+    and concatenates a learned embedding of it to image features.
+    Otherwise the model ignores `tolerated_loss`.
     """
     def __init__(
         self,
@@ -70,6 +67,8 @@ class NeuralTokenCountPredictor(nn.Module):
         num_classes: int = 256,                 # classification target size
 
         # --- conditioning vector ---
+        # --- optional loss conditioning ---
+        use_loss_condition: bool = True,
         loss_dim: int = 1,       # e.g. tolerated loss (scalar)
         loss_proj_dim: int = 64, # project conditioning vector into this many dims
 
@@ -88,10 +87,11 @@ class NeuralTokenCountPredictor(nn.Module):
     ):
         super().__init__()
 
+        # --- config / switches ---
         self.device = device
         self.head_type = head.lower()
         self.backbone_type = backbone_type.lower()
-
+        self.use_loss_condition = use_loss_condition
 
         # set the backbone accordingly
         if self.backbone_type == "sd-vae":
@@ -148,12 +148,23 @@ class NeuralTokenCountPredictor(nn.Module):
         self.conv = nn.Sequential(*blocks)
         self.flatten = nn.Flatten(start_dim=1)  # used if pool="none"
 
-        # ---- 3. Conditioning projection ----
-        self.loss_proj = nn.Sequential(
-            nn.Linear(loss_dim, loss_proj_dim),
-            make_act(activation),
-            nn.Dropout(dropout2d) if dropout2d > 0 else nn.Identity(),
-        )
+        # ------------------------------------------------------------------
+        # Optional loss projection
+        # Only create the module if we plan to use it. This makes checkpointing
+        # and JIT traces cleaner when conditioning is disabled.
+        # ------------------------------------------------------------------
+        if self.use_loss_condition:
+            assert loss_dim > 0 and loss_proj_dim > 0, \
+                "loss_dim and loss_proj_dim must be > 0 when use_loss_condition=True."
+            self.loss_proj = nn.Sequential(
+                nn.Linear(loss_dim, loss_proj_dim),
+                nn.SiLU(),
+                nn.Linear(loss_proj_dim, loss_proj_dim),
+            )
+            self.loss_proj_dim = loss_proj_dim
+        else:
+            self.loss_proj = None
+            self.loss_proj_dim = 0  # contributes nothing to the head input
 
         # ---- 4. Fully-connected head (lazy init) ----
         # We can’t build it until we know the conv output size,
@@ -161,7 +172,7 @@ class NeuralTokenCountPredictor(nn.Module):
         self.fc_hidden = list(fc_hidden)
         self.fc_activation = activation
         self.fc_dropout = dropout2d
-        self.loss_proj_dim = loss_proj_dim
+        # head is built lazily on first forward once input dim is known
         self.head: Optional[nn.Sequential] = None
 
     def _build_head(self, feat_dim: int):
@@ -169,23 +180,21 @@ class NeuralTokenCountPredictor(nn.Module):
         Build the FC head dynamically once we know conv output size.
         """
         layers = []
-        in_dim = feat_dim + self.loss_proj_dim
         act_fc = make_act(self.fc_activation)
 
         for h in self.fc_hidden:
-            layers += [nn.Linear(in_dim, h), act_fc]
+            layers += [nn.Linear(feat_dim, h), act_fc]
             if self.fc_dropout > 0:
                 layers += [nn.Dropout(self.fc_dropout)]
-            in_dim = h
+            feat_dim = h
 
         # --- Final linear depends on head type ---
-
         if self.head_type == "classification":
             # logits: no activation
-            layers += [nn.Linear(in_dim, self.num_classes)]
+            layers += [nn.Linear(feat_dim, self.num_classes)]
         else:
             # regression to [0,1]
-            layers += [nn.Linear(in_dim, 1)]
+            layers += [nn.Linear(feat_dim, 1)]
             layers += [nn.Sigmoid()]  # guarantees output in [0,1]
 
         self.head = nn.Sequential(*layers).to(self.device)
@@ -195,18 +204,22 @@ class NeuralTokenCountPredictor(nn.Module):
         """
         Extract feature map from the backbone.
         Input:  images [B, 3, H, W] in [-1,1]
-        Output: features [B, C, H', W']
+        Output: features
+          - For conv backbones (sd-vae, resnet, raw): [B, C, H', W']
+          - For CLIP: [B, D] pooled embeddings
         """
         if self.backbone_type == "sd-vae":
             posterior = self.backbone.encode(images).latent_dist
             return posterior.mode()  # deterministic (mean of distribution)
         elif self.backbone_type == "resnet":
             return self.backbone(images)["feat"]       # [B, C, H', W']
+        elif self.backbone_type == "clip":
+            return self.backbone.vision_model(pixel_values=images).pooler_output
         else:
             return images                              # [B, 3, H, W]
 
 
-    def forward(self, images: torch.Tensor, tolerated_loss: torch.Tensor) -> torch.Tensor:
+    def forward(self, images: torch.Tensor, tolerated_loss: Optional[torch.Tensor]) -> torch.Tensor:
         """
         Forward pass:
           1. Encode image into latents.
@@ -219,28 +232,60 @@ class NeuralTokenCountPredictor(nn.Module):
             images: [B, 3, H, W]
             tolerated_loss: [B, 1] or [B] (scalar conditioning feature)
         Returns:
-            logits: [B, num_classes]
+            output: [B, num_classes] for classification, or [B, 1] for regression
         """
-        if tolerated_loss.dim() == 1:
-            tolerated_loss = tolerated_loss.unsqueeze(1)
 
-        # Going through the backbone:
-        cnn_input = self._extract_feature_map(images)  # [B, C, H', W']
+        # --- Sanity around loss conditioning ---
+        if self.use_loss_condition:
+            if tolerated_loss is None:
+                raise ValueError("tolerated_loss must be provided when use_loss_condition=True.")
+            if tolerated_loss.dim() == 1:
+                tolerated_loss = tolerated_loss.unsqueeze(1)
 
-        feats = self.conv(cnn_input)                    # conv head output
+        # --- Backbone / conv pathway ---
+        cnn_input = self._extract_feature_map(images)
 
-        if self.post_conv_pool == "gap":
-            feats = feats.mean(dim=(2, 3))            # [B, C]
+        # If backbone outputs 1D features (e.g., CLIP), conv blocks (2D) are incompatible.
+        if cnn_input.dim() == 2: # [B, D]
+            if len(self.conv) > 0:
+                raise RuntimeError(
+                    "Backbone produced 2D features but a conv head is configured. "
+                    "For CLIP, set conv_channels: [] in config so no Conv2d layers are added."
+                )
+            feats = cnn_input  # [B, D]
         else:
-            feats = self.flatten(feats)               # [B, C*H*W]
+            feats = self.conv(cnn_input)  # [B, C, H', W'] after convs
 
-        # Build FC head on the fly the first time
+        # --- Pooling / Flattening to [B, F] ---
+        if feats.dim() == 2:
+            if self.post_conv_pool == "gap":
+                warnings.warn(
+                    "post_conv_pool='gap' requested but features are 2D (e.g., CLIP). "
+                    "Skipping GAP and using the features as-is. Set post_conv_pool='none' to silence this warning.",
+                    RuntimeWarning,
+                )
+            # keep feats as [B, F]
+        else:
+            if self.post_conv_pool == "gap":
+                feats = feats.mean(dim=(2, 3))  # [B, C]
+            elif self.post_conv_pool == "none":
+                feats = self.flatten(feats)     # [B, C*H'*W']
+            else:
+                raise ValueError(f"Unknown post_conv_pool: {self.post_conv_pool}")
+
+        # --- Optional loss embedding and concatenation ---
+        if self.use_loss_condition:
+            loss_emb = self.loss_proj(tolerated_loss)   # [B, loss_proj_dim]
+            x = torch.cat([feats, loss_emb], dim=1)     # [B, F + loss_proj_dim]
+        else:
+            x = feats                                   # [B, F]
+
+        # --- Build FC head lazily the first time ---
         if self.head is None:
-            self._build_head(feats.size(1))
+            self._build_head(x.size(1))
 
-        loss_emb = self.loss_proj(tolerated_loss)     # [B, loss_proj_dim]
-        x = torch.cat([feats, loss_emb], dim=1)       # [B, feat_dim+loss_proj_dim]
-        out = self.head(x)                   # [B, num_classes]
+        # --- Head ---
+        out = self.head(x)
         return out
 
     @staticmethod
