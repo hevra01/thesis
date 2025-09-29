@@ -11,6 +11,57 @@ from torchvision.datasets.folder import default_loader
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".pgm", ".tif", ".tiff", ".webp"}
 
+# Simple transform profiles so sizing/normalization can be configured from config
+
+# these are mean and std for dataset used in CLIP training
+CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
+CLIP_STD  = [0.26862954, 0.26130258, 0.27577711]
+
+# dataset specific
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD  = [0.229, 0.224, 0.225]
+
+
+def build_imagenet_transform(
+    profile: str = "imagenet",
+    image_size: int | None = None,
+    mean: list[float] | None = None,
+    std: list[float] | None = None,
+):
+    """
+    Build a torchvision transform pipeline for different backbones.
+    Profiles:
+      - "imagenet": default 256 crop, ImageNet mean/std.
+      - "clip": default 224 crop, CLIP mean/std.
+      - "sd_vae": default 256 crop, scale to [-1,1] (mean=0.5,std=0.5).
+    You can override image_size via arg if desired.
+    Optionally override normalization with custom mean/std (both required).
+    """
+    profile = (profile or "imagenet").lower()
+    if profile == "clip":
+        # CLIP also expects “statistically ~0 mean, ~1 std” — but with respect to its 
+        # training distribution, not ImageNet.
+        size = 224 if image_size is None else image_size
+        default_mean, default_std = CLIP_MEAN, CLIP_STD
+    elif profile == "sd_vae":
+        # For SD-VAE, the constants (0.5, 0.5) are just a fixed linear transform, not statistics.
+        size = 256 if image_size is None else image_size
+        default_mean, default_std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
+    else:
+        # this is default for imagenet dataset
+        size = 256 if image_size is None else image_size
+        default_mean, default_std = IMAGENET_MEAN, IMAGENET_STD
+
+    use_mean = mean if mean is not None else default_mean
+    use_std  = std  if std  is not None else default_std
+
+    return T.Compose([
+        T.Resize(size),
+        T.CenterCrop(size),
+        T.ToTensor(),
+        T.Normalize(mean=use_mean, std=use_std),
+    ])
+
 
 def get_mnist_dataloader(batch_size=120, split="test", flatten=False, class_filter=None):
     # Load raw MNIST from HuggingFace
@@ -58,26 +109,29 @@ def get_imagenet_dataloader(
     root="/scratch/inf0/user/mparcham/ILSVRC2012",
     split="val",  # or "train"
     batch_size=64,
-    image_size=256,
+    image_size: int | None = None,
     class_filter=None,
     num_workers=64,
-    shuffle=False
+    shuffle=False,
+    transform_profile: str = "imagenet",
+    transform=None,
+    normalize_mean: list[float] | None = None,
+    normalize_std: list[float] | None = None,
 ):
-    # Define standard ImageNet transforms
-    transform = T.Compose([
-        # Rescales the shorter side of the image to image_size. Note that this could be down or upsampling, 
-        # depending on whether the shorter side is smaller or larger than the img_size.
-        # The longer side is then resized to maintain the aspect ratio.
-        T.Resize(image_size), 
-        # Crops out a square of size (image_size × image_size) from the center of the resized image.
-        T.CenterCrop(image_size), 
-        # Converts the image from a PIL/numpy array in range [0, 255] to a PyTorch tensor in range [0.0, 1.0]
-        T.ToTensor(),
-        # Applies per-channel normalization
-        # Given that the normal (expected) distribution has this mean/std, 
-        # re-center and rescale the image data accordingly so it behaves like zero-mean, unit-variance data.
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    """Flexible ImageNet loader with simple, config-friendly transforms.
+    - Set transform_profile to one of {"imagenet", "clip", "sd_vae"}.
+    - Optionally override image_size; if None, a sensible default per profile is used.
+    - Optionally override normalization mean/std.
+    - Or pass a ready-made `transform` to override everything.
+    """
+    # Build transform unless custom provided
+    if transform is None:
+        transform = build_imagenet_transform(
+            profile=transform_profile,
+            image_size=image_size,
+            mean=normalize_mean,
+            std=normalize_std,
+        )
 
     data_root = f"{root}/{split}"
     has_class_subdirs = any(Path(data_root).glob("*/"))
@@ -197,15 +251,56 @@ class ReconstructionDataset(Dataset):
 
 
 class ReconstructionDataset_Neural(Dataset):
-    def __init__(self, reconstruction_data, dataloader):
+    def __init__(
+        self,
+        reconstruction_data,
+        dataloader,
+        filter_key: str | None = None,
+        min_error: float | None = None,
+        max_error: float | None = None,
+    ):
         """
         Args:
             reconstruction_data (list): List of dicts containing reconstruction metrics.
                 (img, k_value, mse_error, vgg_error).
             dataloader (DataLoader): Dataloader from which images can be fetched.
+            filter_key (str|None): Which error field to filter on (e.g., "vgg_error" or "mse_error"). If None, no filtering.
+            min_error (float|None): Keep samples with error >= min_error (if provided).
+            max_error (float|None): Keep samples with error <= max_error (if provided).
         """
-        self.reconstruction_data = reconstruction_data
+
         self.dataloader = dataloader
+
+        # Apply optional filtering on the provided error field
+        self.num_original = len(reconstruction_data)
+        if filter_key is not None and (min_error is not None or max_error is not None):
+            lo = float(min_error) if min_error is not None else float("-inf")
+            hi = float(max_error) if max_error is not None else float("inf")
+            filtered = []
+            missing_key = 0
+            for d in reconstruction_data:
+                if filter_key not in d:
+                    missing_key += 1
+                    continue
+                v = d[filter_key]
+                # tolerate nested structures but we expect scalars
+                try:
+                    val = float(v)
+                except (TypeError, ValueError):
+                    continue
+                if lo <= val <= hi:
+                    filtered.append(d)
+            self.reconstruction_data = filtered
+            self.filter_key = filter_key
+            self.filter_bounds = (lo, hi)
+            self.missing_key_count = missing_key
+        else:
+            self.reconstruction_data = reconstruction_data
+            self.filter_key = None
+            self.filter_bounds = None
+            self.missing_key_count = 0
+
+        self.num_kept = len(self.reconstruction_data)
 
     def __len__(self):
         # this will be the number of images * the number of k values for each image.
