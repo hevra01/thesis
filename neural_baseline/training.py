@@ -61,6 +61,38 @@ def main(cfg: DictConfig):
             config=OmegaConf.to_container(cfg, resolve=True),
         )
 
+    # ---------------------------
+    # Log Distributed / GPU runtime info (once on rank 0)
+    # ---------------------------
+    try:
+        num_visible = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        gpu_names = [torch.cuda.get_device_name(i) for i in range(num_visible)] if num_visible > 0 else []
+        ddp_info = {
+            "ddp/enabled": dist_is_initialized(),
+            "ddp/world_size": get_world_size(),
+            "ddp/rank": get_rank(),
+            "ddp/local_rank": local_rank,
+            "cuda/available": torch.cuda.is_available(),
+            "cuda/num_visible_gpus": num_visible,
+            "cuda/device": str(device),
+            "cuda/visible_devices_env": os.environ.get("CUDA_VISIBLE_DEVICES", ""),
+            "nccl/debug": os.environ.get("NCCL_DEBUG", ""),
+            "nccl/async_error_handling": os.environ.get("NCCL_ASYNC_ERROR_HANDLING", ""),
+            "omp/num_threads": os.environ.get("OMP_NUM_THREADS", ""),
+            "cudnn/benchmark": bool(torch.backends.cudnn.benchmark),
+            "torch/version": torch.__version__,
+            "cuda/gpu_names": "; ".join(gpu_names) if gpu_names else "",
+        }
+        if is_main_process():
+            print("[DDP] Runtime info:")
+            for k, v in ddp_info.items():
+                print(f"  - {k}: {v}")
+            # Log once at step 0
+            wandb.log(ddp_info, step=0)
+    except Exception as e:
+        if is_main_process():
+            print(f"[DDP] Failed to gather/log runtime info: {e}")
+
     # Load JSONs
     # this data holds images, mse_errors, vgg_errors, token counts for different k_values
     with open(cfg.experiment.reconstruction_dataset.reconstruction_data_path, "r") as f:
@@ -288,12 +320,33 @@ def main(cfg: DictConfig):
 
 
         # ---------------------------
-        # Global average across processes (optional but recommended)
-        # We reduce sums over ranks and divide by total number of batches.
+        # Global average across processes (DDP metric reduction)
+        # Why this is here:
+        # - In DDP, each process ("rank") sees only a shard of data. A local
+        #   average (epoch_loss / len(local_loader)) reflects only that shard.
+        # - To report a true job-wide metric, we sum numerators and denominators
+        #   across all ranks with all_reduce(SUM), then divide.
+        # Terms:
+        # - rank: process id in {0 .. world_size-1}; rank 0 is the main process.
+        # - world_size: total number of processes (typically = number of GPUs).
+        # Mechanics:
+        # - dist.all_reduce(t, SUM) replaces each rank's tensor t with the sum
+        #   over all ranks (in-place, synchronized). After that call, all ranks
+        #   hold the same global sum.
+        # Semantics we keep here:
+        # - "mean-of-batches": (sum of per-batch losses) / (total number of batches
+        #   across all ranks). This matches your original single-GPU definition.
+        # Notes:
+        # - Training correctness does not depend on this block; DDP already
+        #   synchronizes gradients during backward. This is for accurate logging.
+        # - If you prefer a sample-weighted mean, accumulate inside the loop:
+        #     sum_loss += loss.item() * batch_size; sum_count += batch_size
+        #   then all_reduce those two scalars and divide.
+        # - On single GPU (no dist), this block just uses the local values.
         # ---------------------------
-        loss_sum = torch.tensor([epoch_loss], device=device)
-        lossA_sum = torch.tensor([epoch_loss_analysis], device=device)
-        n_batches = torch.tensor([len(recon_dataloader)], device=device)
+        loss_sum = torch.tensor(epoch_loss, device=device, dtype=torch.float32)
+        lossA_sum = torch.tensor(epoch_loss_analysis, device=device, dtype=torch.float32)
+        n_batches = torch.tensor(len(recon_dataloader), device=device, dtype=torch.float32)
         if dist_is_initialized():
             dist.all_reduce(loss_sum, op=dist.ReduceOp.SUM)
             dist.all_reduce(lossA_sum, op=dist.ReduceOp.SUM)
@@ -304,8 +357,8 @@ def main(cfg: DictConfig):
         if is_main_process():
             print(
                 f"Epoch {epoch + 1}/{num_epochs}, Avg Loss: {avg_loss:.6f}, "
-                f"Avg Loss Analysis (MAE): {avg_loss_analysis:.6f}"
-            )
+                f"Avg Loss Analysis (MAE): {avg_loss_analysis:.6f}")
+        
 
         # ---------------------------
         # ✅ Log to Weights & Biases
