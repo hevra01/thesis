@@ -306,7 +306,10 @@ class ReconstructionDataset_Heuristic(Dataset):
     """
     this is different from ReconstructionDataset_token_based in the sense that this also has the edge information.
     """
-    def __init__(self, reconstruction_data, edge_ratio_information):
+    def __init__(self, reconstruction_data, edge_ratio_information, 
+                 filter_key: str | None = None,
+                min_error: float | None = None,
+                max_error: float | None = None):
         """
         Args:
             reconstruction_data (list): List of dicts containing reconstruction metrics.
@@ -316,6 +319,37 @@ class ReconstructionDataset_Heuristic(Dataset):
         """
         self.reconstruction_data = reconstruction_data
         self.edge_ratio_information = edge_ratio_information
+
+        # Apply optional filtering on the provided error field
+        self.num_original = len(reconstruction_data)
+        if filter_key is not None and (min_error is not None or max_error is not None):
+            lo = float(min_error) if min_error is not None else float("-inf")
+            hi = float(max_error) if max_error is not None else float("inf")
+            filtered = []
+            missing_key = 0
+            for d in reconstruction_data:
+                if filter_key not in d:
+                    missing_key += 1
+                    continue
+                v = d[filter_key]
+                # tolerate nested structures but we expect scalars
+                try:
+                    val = float(v)
+                except (TypeError, ValueError):
+                    continue
+                if lo <= val <= hi:
+                    filtered.append(d)
+            self.reconstruction_data = filtered
+            self.filter_key = filter_key
+            self.filter_bounds = (lo, hi)
+            self.missing_key_count = missing_key
+        else:
+            self.reconstruction_data = reconstruction_data
+            self.filter_key = None
+            self.filter_bounds = None
+            self.missing_key_count = 0
+
+        self.num_kept = len(self.reconstruction_data)
 
     def __len__(self):
         # this will be the number of images * the number of k values for each image.

@@ -56,7 +56,6 @@ def main(cfg: DictConfig):
     # Initialize W&B and dump Hydra config
     if is_main_process():
         wandb.init(
-            project="dataset_prep",
             name=cfg.experiment.experiment_name,
             config=OmegaConf.to_container(cfg, resolve=True),
         )

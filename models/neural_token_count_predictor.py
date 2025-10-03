@@ -60,7 +60,6 @@ class NeuralTokenCountPredictor(nn.Module):
         resnet_pretrained=True,
 
         clip_model_name: str = "openai/clip-vit-base-patch32", # CLIP model name (if used)
-        clip_feature_dim: int = 512,  # CLIP feature dimension 
         clip_pretrained: bool = True,  # whether to use pretrained CLIP model
 
         head: str = "regression",            # "classification" | "regression"
@@ -128,7 +127,7 @@ class NeuralTokenCountPredictor(nn.Module):
 
         self.num_classes = num_classes
         self.post_conv_pool = post_conv_pool.lower()
-        assert self.post_conv_pool in {"none", "gap"}, "pool must be 'none' or 'gap'"
+        assert self.post_conv_pool in {"none", "gap", "flatten"}, "pool must be 'none' or 'gap'"
 
         # ---- 2. Convolutional head ----
         blocks = []
@@ -268,7 +267,7 @@ class NeuralTokenCountPredictor(nn.Module):
         else:
             if self.post_conv_pool == "gap":
                 feats = feats.mean(dim=(2, 3))  # [B, C]
-            elif self.post_conv_pool == "none":
+            elif self.post_conv_pool == "flatten":
                 feats = self.flatten(feats)     # [B, C*H'*W']
             else:
                 raise ValueError(f"Unknown post_conv_pool: {self.post_conv_pool}")

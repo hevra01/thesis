@@ -4,6 +4,7 @@ import torch.nn as nn
 
 _ACTS = {
     "sigmoid": nn.Sigmoid,
+    "relu": nn.ReLU,
 }
 
 class HeuristicTokenCountPredictor(nn.Module):
