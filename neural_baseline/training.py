@@ -166,6 +166,9 @@ def main(cfg: DictConfig):
     num_params = sum(p.numel() for p in token_count_predictor.parameters() if p.requires_grad)
     if is_main_process():
         print(f"Number of trainable parameters: {num_params:,}")
+        print("len(recon_dataloader):", len(recon_dataloader))
+        print("len(recon_dataloader.dataset):", len(recon_dataloader.dataset))
+        print("model:\n", token_count_predictor)
 
     optimizer = instantiate(cfg.experiment.optimizer, params=token_count_predictor.parameters())
     training_loss = instantiate(cfg.experiment.training.loss_training)
@@ -217,13 +220,6 @@ def main(cfg: DictConfig):
 
     # set the model in training mode
     token_count_predictor.train()
-
-    if is_main_process():
-        print("len(recon_dataloader):", len(recon_dataloader))
-        dataset_size = len(recon_dataloader.dataset)
-        print("dataset_size:", dataset_size)
-    else:
-        dataset_size = len(recon_dataloader.dataset)
 
     # Log filtering info if applied
     if is_main_process() and hasattr(recon_dataset, "filter_key") and recon_dataset.filter_key is not None:
@@ -316,6 +312,8 @@ def main(cfg: DictConfig):
 
             epoch_loss += float(loss.item())
             epoch_loss_analysis += float(loss_analysis.item())
+            if is_main_process():
+                print(f"batch Loss: {loss_analysis.item():.6f}")
 
 
         # ---------------------------
