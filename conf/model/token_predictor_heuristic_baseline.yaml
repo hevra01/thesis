@@ -2,9 +2,11 @@
 _target_: models.heuristic_token_count_predictor.HeuristicTokenCountPredictor
 
 # MLP
-hidden_dims: []            # [] => no hidden layers
-hidden_activation: sigmoid    # relu | gelu | silu | tanh
+hidden_dims: [4, 8, 16, 32, 64, 128, 64, 32]            # [] => no hidden layers
+hidden_activation: relu    # relu | gelu | silu | tanh
 dropout: 0.1               # applied after each hidden layer (if any)
+
+
 
 # Output head
 output_activation: sigmoid # linear | sigmoid | relu | softplus

@@ -1,0 +1,49 @@
+# conf/model/token_count_predictor.yaml
+_target_: models.neural_token_count_predictor.NeuralTokenCountPredictor
+
+# device to run on
+device: cuda      
+
+# --- Backbone/feature extractor: can be either a CNN alone or VAE encoder & CNN or Resnet---
+# one of: sd-vae | resnet | rgb
+backbone_type: "clip"
+
+# used when backbone == "clip", dim size is 768
+clip_model_name: "openai/clip-vit-base-patch32"  # could also be RN50, RN101, etc.
+clip_pretrained: true            # always true for CLIP, since we rely on pretrained
+
+
+# --- CNN trunk (for RGB path) ---
+# We define per-layer channels and strides. Stride=2 downsamples spatially.
+# Example below (for 256x256 images → latents ~ [B,4,32,32]):
+#   C0:  3 →  32 @ 128x128   (stride 2)
+#   C1: 32 →  64 @ 64x64   (stride 2)
+#   C2: 64 → 128 @  32x32   (stride 2)
+conv_channels: []       # output channels for each conv block. empty for clip
+conv_strides:  []         # stride per conv block (same length)
+norm: group                           # group | batch | none
+num_groups: 8                               # used if norm=group
+activation: silu                      # relu | gelu | silu | tanh
+dropout2d: 0.10                            # dropout after conv blocks (2D)
+
+# Optional pooling after the conv stack:
+#   none  → keep spatial dims, then flatten
+#   gap   → global average pool to [B, C], skip flatten
+post_conv_pool: none                       # none | gap
+
+
+# --- Conditioning vector (tolerated loss etc.) ---
+use_loss_condition: false
+loss_dim: 1                               # size of conditioning vector
+loss_proj_dim: 164                        # embed cond → this many dims
+
+
+# --- Task ---
+head: "regression"               # classification | regression
+num_classes: 256                     # for classification: predict counts in {1..256}. for regression: predicts only 1 class
+
+
+# --- Fully-connected head (regression) ---
+# Applied after (flatten OR GAP) and concat with loss embedding.
+fc_hidden: [512, 256, 128, 64]                      
+

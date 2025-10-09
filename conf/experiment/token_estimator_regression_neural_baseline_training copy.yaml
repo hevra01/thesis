@@ -27,7 +27,7 @@ reconstruction_dataset:
   #   min: 2.83040   # e.g., 0.30
   #   max: 2.83640   # e.g., 0.35
 
-checkpoint_path: "neural_baseline/checkpoint/last_regression_transformer_transformer_token_small.pt"
+checkpoint_path: "neural_baseline/checkpoint/last_regression_transformer_after_backbone_small.pt"
 
 
 # different experiments might use different splits of the data
@@ -35,4 +35,4 @@ dataset:
   split: "train"
   transform_profile: "sd_vae"  # 224 when using clip, 256 when using resnet
 
-experiment_name: "token_estimator_regression_neural_baseline_transformer_transformer_token_small"
+experiment_name: "token_estimator_regression_neural_baseline_transformer_after_backbone_small"

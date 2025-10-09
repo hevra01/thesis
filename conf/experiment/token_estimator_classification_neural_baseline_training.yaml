@@ -1,22 +1,28 @@
 defaults:
-  - /model: token_predictor_heuristic_baseline
+  - /model: token_predictor_neural_baseline
   - /dataset: imageNet
 
 
 optimizer:
   _target_: torch.optim.Adam
-  lr: 0.0001
+  lr: 0.001
 
 training:
-    num_epochs: 1000
-    loss: 
+    num_epochs: 100
+    loss_training: 
+      _target_: reconstruction_loss.GaussianCrossEntropyLoss
+    loss_analysis: 
       _target_: reconstruction_loss.MAELoss
 
 # this is for the main dataset that has the mse_errors, vgg_errors for all the images for different
 # values of k_values and the  bpp.
 reconstruction_dataset:
   reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
-  edge_ratio_path: "data/datasets/imageNet_edge_ratios/train_imageNet_edge_ratios.json"
   batch_size: 32 # this is the batch size for the reconstruction dataset
+  shuffle: true
 
-checkpoint_path: "heuristic_baseline/checkpoint/last.pt"
+checkpoint_path: "neural_baseline/checkpoint/last_classification.pt"
+
+
+dataset:
+  split: "train"

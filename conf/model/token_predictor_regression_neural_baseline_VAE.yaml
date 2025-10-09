@@ -6,23 +6,11 @@ device: cuda
 
 # --- Backbone/feature extractor: can be either a CNN alone or VAE encoder & CNN or Resnet---
 # one of: sd-vae | resnet | rgb
-backbone_type: "clip"
+backbone_type: "sd-vae"
 
 # used when backbone == "sd-vae"
-hf_hub_path: "stabilityai/sd-vae-ft-mse"
+hf_hub_path: "stabilityai/sd-vae-ft-mse" # dim size is 4, 32, 32
 freeze_vae: true
-
-# used when backbone == "resnet"
-resnet_name: "resnet18"         # any torchvision name (resnet18/34/50)
-resnet_layer: "layer1"          # "layer2" (128x32x32) or "layer3" (256x16x16)
-resnet_feature_dim: 64  # feature dimension of the extracted layer 64 for layer1, 128 for layer2, 256 for layer3
-resnet_pretrained: true
-
-# used when backbone == "clip"
-clip_model_name: "openai/clip-vit-base-patch32"  # could also be RN50, RN101, etc.
-clip_feature_dim: 512            # depends on model (ViT-B/32 = 512, ViT-L/14 = 768, RN50 = 1024)
-clip_pretrained: true            # always true for CLIP, since we rely on pretrained
-
 
 # --- CNN trunk (for RGB path) ---
 # We define per-layer channels and strides. Stride=2 downsamples spatially.
@@ -31,9 +19,9 @@ clip_pretrained: true            # always true for CLIP, since we rely on pretra
 #   C1: 32 →  64 @ 64x64   (stride 2)
 #   C2: 64 → 128 @  32x32   (stride 2)
 use_cnn: true
-conv_channels: [] #[32, 64, 128]       # output channels for each conv block. empty for clip
-conv_strides:  [] #[2,   2,   2]         # stride per conv block (same length)
-norm: group                                # group | batch | none
+conv_channels: [16, 32, 64]       # output channels for each conv block. empty for clip
+conv_strides:  [2, 2, 2]         # stride per conv block (same length)
+norm: group                           # group | batch | none
 num_groups: 8                               # used if norm=group
 activation: silu                      # relu | gelu | silu | tanh
 dropout2d: 0.10                            # dropout after conv blocks (2D)
@@ -41,11 +29,43 @@ dropout2d: 0.10                            # dropout after conv blocks (2D)
 # Optional pooling after the conv stack:
 #   none  → keep spatial dims, then flatten
 #   gap   → global average pool to [B, C], skip flatten
-post_conv_pool: none                       # none | gap
+post_conv_pool: flatten                 # none | gap | flatten
+
+
+# --- Task ---
+head: "regression"               # classification | regression
+num_classes: 256                     # for classification: predict counts in {1..256}. for regression: predicts only 1 class
+
+
+# --- Fully-connected head (regression) ---
+# Applied after (flatten OR GAP) and concat with loss embedding.
+fc_hidden: [32, 16]
+
+
+# --- Optional Transformer aggregator (after conv/backbone) ---
+# When enabled, treats [B,C,H,W] features as a sequence and encodes with a Transformer.
+# Recommended when you want more expressive modeling than simple GAP/flatten.
+use_transformer: true                 # set true to enable
+transformer_dim: 256                   # internal d_model; will project conv C -> d_model if different
+
+# Each layer typically has:
+# A self-attention block (learns relationships between tokens),
+# A feed-forward block (MLP to mix information).
+# This sets how many Transformer blocks you stack on top of each other.
+transformer_layers: 4
+transformer_nhead: 8
+transformer_mlp_ratio: 4.0
+transformer_dropout: 0.1
+transformer_add_cls: true              # add a [CLS] token and use it for pooling
+transformer_pool: cls                  # cls | mean: This tells the model how to combine token outputs into a single vector before the final layer.
+pos_encoding: sincos2d                 # sincos2d | none
+
+input_resolution: [256, 256]          # Provide this to enable eager FC head build for 'flatten' pooling by computing spatial dims analytically instead of waiting for a real batch.
+
 
 
 # --- Conditioning vector (tolerated loss etc.) ---
-use_loss_condition: false
+use_loss_condition: true
 loss_dim: 1                               # size of conditioning vector (e.g., tolerated reconstruction error)
 loss_proj_dim: 164                        # embed cond → this many dims (shared for all locations)
 
@@ -63,32 +83,4 @@ loss_proj_dim: 164                        # embed cond → this many dims (share
 #       • Requires conv_channels not empty. Safe to use together with after_backbone.
 #   - head: concatenate the loss embedding right before the final FC head (on the pooled/flattened features).
 # Example: [after_backbone, adaln] or [transformer_token, head]
-conditioning_locations: []
-
-
-# --- Task ---
-head: "regression"               # classification | regression
-num_classes: 256                     # for classification: predict counts in {1..256}. for regression: predicts only 1 class
-
-
-# --- Fully-connected head (regression) ---
-# Applied after (flatten OR GAP) and concat with loss embedding.
-fc_hidden: [128, 64]                      
-
-# --- Optional Transformer aggregator (after conv/backbone) ---
-# When enabled, we treat [B,C,H',W'] as tokens [B, H'*W', C], add 2D sin-cos position embeddings,
-# run a Transformer encoder, and pool (cls/mean) to feed the FC head.
-use_transformer: false
-transformer_dim: 256
-transformer_layers: 4
-transformer_nhead: 8
-transformer_mlp_ratio: 4.0
-transformer_dropout: 0.1
-transformer_add_cls: true     # add learnable [CLS] token
-transformer_pool: cls         # cls | mean
-pos_encoding: sincos2d        # sincos2d | none
-
-# If you use post_conv_pool: none (flatten) without transformer, you must set input_resolution
-# to enable eager head build (so we can compute C*H'*W'). Not needed for GAP or transformer paths.
-# input_resolution: [256, 256]
-
+conditioning_locations: [transformer_token]
