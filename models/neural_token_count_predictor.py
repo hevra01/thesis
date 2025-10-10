@@ -75,7 +75,7 @@ class NeuralTokenCountPredictor(nn.Module):
         #  - "after_backbone": right after backbone output, before trainable CNN (spatial concat) or
         #                      for pooled vectors (e.g. CLIP pooled), concatenate to the vector.
         #  - "transformer_token": prepend a learned token to the Transformer input (requires use_transformer=True).
-        #  - "adaln": modulate each Conv block with FiLM-like scales/shifts derived from conditioning.
+        #  - "adaln": modulate the transformer tokens
         #  - "head": concatenate conditioning to the final pooled/flattened feature just before the FC head.
         # Notes:
         #  - You can specify multiple locations; the signal will be injected at each selected point.
@@ -172,6 +172,9 @@ class NeuralTokenCountPredictor(nn.Module):
                 print("Warning: CLIP without pretrained weights is unusual.")
             
             if self.use_transformer:
+                """
+                CLIP can output both pooled features (cls) and token embeddings.
+                """
                 c_in = self.backbone.vision_model.config.hidden_size   # tokens
             else:
                 c_in = self.backbone.visual_projection.out_features     # pooled
@@ -209,7 +212,7 @@ class NeuralTokenCountPredictor(nn.Module):
         self.conv_blocks = nn.ModuleList()
         self.flatten = nn.Flatten(start_dim=1)  # used for flatten pooling
 
-        # If we plan to inject as extra channels right after backbone, account for it in first in_ch.
+        # If we plan to inject the loss as extra channels right after backbone, account for it in first in_ch.
         will_inject_as_channels = self.use_loss_condition and ("after_backbone" in self.cond_locs)
         if self.use_cnn:
             in_ch = c_in + (loss_proj_dim if will_inject_as_channels else 0)
@@ -276,9 +279,13 @@ class NeuralTokenCountPredictor(nn.Module):
         # Only create the module if we plan to use it. This makes checkpointing
         # and JIT traces cleaner when conditioning is disabled.
         # ------------------------------------------------------------------
-        if self.use_loss_condition:
+        # Determine where a projected loss vector is actually needed (not for transformer_token only)
+        self._needs_loss_vec = self.use_loss_condition and any(
+            loc in self.cond_locs for loc in ("after_backbone", "adaln", "head")
+        )
+        if self._needs_loss_vec:
             assert loss_dim > 0 and loss_proj_dim > 0, \
-                "loss_dim and loss_proj_dim must be > 0 when use_loss_condition=True."
+                "loss_dim and loss_proj_dim must be > 0 when using loss vector conditioning."
             self.loss_proj = nn.Sequential(
                 nn.Linear(loss_dim, loss_proj_dim),
                 nn.SiLU(),
@@ -318,7 +325,7 @@ class NeuralTokenCountPredictor(nn.Module):
                 # CLIP pooled output (vector). If not using transformer, we will
                 # concatenate the loss vector at feature level only if requested.
                 base = self.backbone.visual_projection.out_features
-                extra = (self.loss_proj_dim if (self.use_loss_condition and ("after_backbone" in self.cond_locs)) else 0)
+                extra = (self.loss_proj_dim if (self._needs_loss_vec and ("after_backbone" in self.cond_locs)) else 0)
                 feat_core_dim = base + extra
             # if not clip, then we need to either gap or flatten the spatial dimensions
             elif self.post_conv_pool == "gap":
@@ -372,7 +379,7 @@ class NeuralTokenCountPredictor(nn.Module):
 
         if feat_core_dim is not None:
             # If we also plan to concatenate conditioning at the head, account for it now
-            if self.use_loss_condition and ("head" in self.cond_locs):
+            if self._needs_loss_vec and ("head" in self.cond_locs):
                 feat_core_dim += self.loss_proj_dim
             # feat_core_dim already accounts for conditioning where applicable
             self._build_head(feat_core_dim)
@@ -537,14 +544,17 @@ class NeuralTokenCountPredictor(nn.Module):
             output: [B, num_classes] for classification, or [B, 1] for regression
         """
 
-        # --- Loss conditioning (single sanity block) ---
-        loss_vec = None
+        # --- Loss conditioning: prepare tolerated_loss once; project lazily where needed ---
+        # Rationale:
+        # - Different conditioning locations require different projections.
+        # - We only compute loss_vec (via self.loss_proj) at the exact sites that use it
+        #   (after_backbone/adaln/head). For transformer_token we use self.loss_token_proj instead.
+        loss_vec = None  # [B, loss_proj_dim], computed on-demand below
         if self.use_loss_condition:
             if tolerated_loss is None:
                 raise ValueError("tolerated_loss must be provided when use_loss_condition=True.")
             if tolerated_loss.dim() == 1:
-                tolerated_loss = tolerated_loss.unsqueeze(1)
-            loss_vec = self.loss_proj(tolerated_loss)  # [B, loss_proj_dim]
+                tolerated_loss = tolerated_loss.unsqueeze(1)  # ensure shape [B,1]
 
         # --- Backbone ---
         backbone_output_shape = self._extract_pretrained_feature_map(images)
@@ -560,7 +570,9 @@ class NeuralTokenCountPredictor(nn.Module):
                 )
             feats = backbone_output_shape  # [B, D]
             # Optional early concat at feature vector level
-            if self.use_loss_condition and ("after_backbone" in self.cond_locs) and loss_vec is not None:
+            if self.use_loss_condition and ("after_backbone" in self.cond_locs):
+                if loss_vec is None:
+                    loss_vec = self.loss_proj(tolerated_loss)  # [B, loss_proj_dim]
                 feats = torch.cat([feats, loss_vec], dim=1)
         elif backbone_output_shape.dim() == 3:
             # 3D tokens (e.g., CLIP last_hidden_state when use_transformer=True). We keep
@@ -575,23 +587,32 @@ class NeuralTokenCountPredictor(nn.Module):
                               "this location is ignored for tokens. Use 'transformer_token' instead.")
             feats = backbone_output_shape  # [B, T, C]
         else:
-            # Optionally inject loss as extra channels before Conv2d by spatially tiling the vector
+            # 4D spatial features
             x = backbone_output_shape
-            if self.use_loss_condition and ("after_backbone" in self.cond_locs) and loss_vec is not None:
+            # Optionally inject loss as extra channels before Conv2d by spatially tiling the vector
+            if self.use_loss_condition and ("after_backbone" in self.cond_locs):
+                if loss_vec is None:
+                    loss_vec = self.loss_proj(tolerated_loss)  # [B, loss_proj_dim]
                 B, C, H, W = x.shape
                 loss_map = loss_vec[:, :, None, None].expand(B, loss_vec.size(1), H, W)
                 x = torch.cat([x, loss_map], dim=1)  # [B, C+loss_proj_dim, H, W]
-            # run conv blocks (no AdaLN here; AdaLN applies to transformer only)
+            # run conv blocks
             for blk in self.conv_blocks:
                 x = blk(x)
             feats = x  # [B, C, H', W'] after convs
 
         # --- Optional Transformer aggregator ---
         if self.use_transformer:
-            # Optional loss token
+            # Optional loss token (separate projection into transformer dim)
             prefix = None
-            if self.use_loss_condition and ("transformer_token" in self.cond_locs) and (self.loss_token_proj is not None) and (tolerated_loss is not None):
+            if self.use_loss_condition and ("transformer_token" in self.cond_locs) and (self.loss_token_proj is not None):
                 prefix = self.loss_token_proj(tolerated_loss).unsqueeze(1)  # [B,1,D]
+
+            # Optional AdaLN on transformer tokens needs loss_vec
+            if self.use_loss_condition and ("adaln" in self.cond_locs):
+                if loss_vec is None:
+                    loss_vec = self.loss_proj(tolerated_loss)  # [B, loss_proj_dim]
+
             feats_vec = self._apply_transformer(feats, prefix_tokens=prefix, loss_vec=loss_vec)
         else:
             # --- Pooling / Flattening to [B, F] (classic CNN path) ---
@@ -613,7 +634,9 @@ class NeuralTokenCountPredictor(nn.Module):
 
         # Optionally concatenate conditioning at the head
         x = feats_vec
-        if self.use_loss_condition and ("head" in self.cond_locs) and (loss_vec is not None):
+        if self.use_loss_condition and ("head" in self.cond_locs):
+            if loss_vec is None:
+                loss_vec = self.loss_proj(tolerated_loss)  # [B, loss_proj_dim]
             x = torch.cat([x, loss_vec], dim=1)
 
         # --- Head ---

@@ -55,10 +55,11 @@ def main(cfg: DictConfig):
 
     # Initialize W&B and dump Hydra config
     if is_main_process():
-        wandb.init(
+        run = wandb.init(
             name=cfg.experiment.experiment_name,
             config=OmegaConf.to_container(cfg, resolve=True),
         )
+        wandb.run.summary["run_id"] = run.id
 
     # ---------------------------
     # Log Distributed / GPU runtime info (once on rank 0)
@@ -67,7 +68,7 @@ def main(cfg: DictConfig):
         num_visible = torch.cuda.device_count() if torch.cuda.is_available() else 0
         gpu_names = [torch.cuda.get_device_name(i) for i in range(num_visible)] if num_visible > 0 else []
         ddp_info = {
-            "ddp/enabled": dist_is_initialized(),
+            "ddp/enabled": dist_is_initialized(), # Checks whether PyTorch Distributed (DDP) has been initialized.
             "ddp/world_size": get_world_size(),
             "ddp/rank": get_rank(),
             "ddp/local_rank": local_rank,
@@ -87,7 +88,7 @@ def main(cfg: DictConfig):
             for k, v in ddp_info.items():
                 print(f"  - {k}: {v}")
             # Log once at step 0
-            wandb.log(ddp_info, step=0)
+            wandb.config.update(ddp_info)
     except Exception as e:
         if is_main_process():
             print(f"[DDP] Failed to gather/log runtime info: {e}")
@@ -161,7 +162,7 @@ def main(cfg: DictConfig):
             output_device=local_rank if device.type == "cuda" else None,
             find_unused_parameters=False,
         )
-
+    print("model:\n", token_count_predictor)
     # Count only trainable parameters
     num_params = sum(p.numel() for p in token_count_predictor.parameters() if p.requires_grad)
     if is_main_process():
