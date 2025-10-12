@@ -237,6 +237,7 @@ class ReconstructionDataset_Neural(Dataset):
         filter_key: str | None = None,
         min_error: float | None = None,
         max_error: float | None = None,
+        error_key: str = "vgg_error",
     ):
         """
         Args:
@@ -246,6 +247,7 @@ class ReconstructionDataset_Neural(Dataset):
             filter_key (str|None): Which error field to filter on (e.g., "vgg_error" or "mse_error"). If None, no filtering.
             min_error (float|None): Keep samples with error >= min_error (if provided).
             max_error (float|None): Keep samples with error <= max_error (if provided).
+            error_key (str): Name of the field in each data_point to read the error from (default: "vgg_error").
         """
 
         self.dataloader = dataloader
@@ -280,6 +282,7 @@ class ReconstructionDataset_Neural(Dataset):
             self.missing_key_count = 0
 
         self.num_kept = len(self.reconstruction_data)
+        self.error_key = error_key
 
     def __len__(self):
         # this will be the number of images * the number of k values for each image.
@@ -294,11 +297,12 @@ class ReconstructionDataset_Neural(Dataset):
         data_point = self.reconstruction_data[idx]
         image_id = data_point["image_id"]
         k_value = data_point["k_value"]
-        vgg_error = data_point["vgg_error"]
+        # Read the requested error field, defaulting to vgg if present
+        err_val = data_point[self.error_key]
 
         return {
             "image": self.dataloader.dataset[image_id][0],  # Get the image from the dataloader
-            "vgg_error": vgg_error,
+            self.error_key: err_val,
             "k_value": k_value
         }
     

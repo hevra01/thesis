@@ -1,16 +1,15 @@
+
+import json
 import os
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import torch
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 import wandb
-from data.utils.dataloaders import ReconstructionDataset_Neural
-import json
 from hydra.utils import instantiate
-
+from torch.utils.data.distributed import DistributedSampler
+from data.utils.dataloaders import ReconstructionDataset_Neural
+from torch.utils.data import DataLoader
 
 # ------------------------------
 # Distributed utilities (DDP)
@@ -35,22 +34,26 @@ def is_main_process() -> bool:
     return get_rank() == 0
 
 
-@hydra.main(version_base=None, config_path="../conf", config_name="neural_baseline_training")
+@hydra.main(version_base=None, config_path="../conf", config_name="experiment/token_estimator_given_loss")
 def main(cfg: DictConfig):
 
-    # -------------------------------------
-    # Device and distributed initialization
-    # -------------------------------------
-    # If launched via torchrun, LOCAL_RANK, RANK, WORLD_SIZE are set.
+    
+    # ---------------- Device & DDP init ---------------- #
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
-    if torch.cuda.is_available():
-        torch.cuda.set_device(local_rank)
-    # Initialize process group if torchrun env vars are present.
-    if "RANK" in os.environ and "WORLD_SIZE" in os.environ and not dist_is_initialized():
-        dist.init_process_group(backend="nccl", init_method="env://")
 
-    # Select device: per-process GPU in DDP or fallback to cfg.device
-    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else cfg.device)
+    if torch.cuda.is_available():
+        # Map this process to "its" GPU (relative to CUDA_VISIBLE_DEVICES)
+        torch.cuda.set_device(local_rank)
+
+    # Initialize DDP if launched via torchrun
+    if ("RANK" in os.environ) and ("WORLD_SIZE" in os.environ) and not dist.is_initialized():
+        backend = "nccl" if torch.cuda.is_available() else "gloo"
+        dist.init_process_group(backend=backend, init_method="env://")
+
+    # Pick device (per-process GPU under DDP, else cfg.device e.g. "cpu")
+    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else cfg.experiment.device)
+
+    # Let cuDNN benchmark conv algorithms (great if shapes are stable)
     torch.backends.cudnn.benchmark = True
 
     # Initialize W&B and dump Hydra config
@@ -106,22 +109,11 @@ def main(cfg: DictConfig):
 
     # This dataset holds the mse_errors, vgg_errors for all the images for different 
     # values of k_values and the  bpp.
-    # Optional filtering to constrain error range (e.g., near-constant difficulty)
-    filt_cfg = getattr(cfg.experiment.reconstruction_dataset, "filter", "vgg_error")
-    if filt_cfg is not None:
-        filter_key = getattr(filt_cfg, "key", None)
-        min_error = getattr(filt_cfg, "min", None)
-        max_error = getattr(filt_cfg, "max", None)
-    else:
-        filter_key = min_error = max_error = None
-
+    # Choose which reconstruction loss field to learn from; default to 'vgg_error' if not set
     recon_loss_key = cfg.experiment.reconstruction_dataset.reconstruction_loss
     recon_dataset = ReconstructionDataset_Neural(
         reconstruction_data=reconstruction_data,
         dataloader=dataloader,
-        filter_key=filter_key,
-        min_error=min_error,
-        max_error=max_error,
         error_key=recon_loss_key
     )
 
@@ -175,12 +167,7 @@ def main(cfg: DictConfig):
 
     optimizer = instantiate(cfg.experiment.optimizer, params=token_count_predictor.parameters())
     training_loss = instantiate(cfg.experiment.training.loss_training)
-    mae_loss = instantiate(cfg.experiment.training.loss_analysis)
-
-    # check if regression or classification
-    is_reg = getattr(cfg.experiment.model, "head", "classification") == "regression"
-    num_classes = getattr(cfg.experiment.model, "num_classes", 256)
-
+    analysis_loss = instantiate(cfg.experiment.training.loss_analysis)
 
     # ---------------------------
     # SIMPLE CHECKPOINT RESUME
@@ -220,86 +207,40 @@ def main(cfg: DictConfig):
     # Training loop (resume-aware)
     # ---------------------------
     num_epochs = cfg.experiment.training.num_epochs
+    reconstruction_loss = cfg.experiment.reconstruction_loss
 
     # set the model in training mode
     token_count_predictor.train()
 
-    # Log filtering info if applied
-    if is_main_process() and hasattr(recon_dataset, "filter_key") and recon_dataset.filter_key is not None:
-        print(
-            f"Applied filtering on '{recon_dataset.filter_key}' in range {recon_dataset.filter_bounds}; "
-            f"kept {recon_dataset.num_kept}/{recon_dataset.num_original} samples (missing_key={recon_dataset.missing_key_count})"
-        )
-        wandb.log(
-            {
-                "filter/key": recon_dataset.filter_key,
-                "filter/min": recon_dataset.filter_bounds[0],
-                "filter/max": recon_dataset.filter_bounds[1],
-                "filter/kept": recon_dataset.num_kept,
-                "filter/original": recon_dataset.num_original,
-                "filter/missing_key": recon_dataset.missing_key_count,
-            }
-        )
-    
     for epoch in range(start_epoch, num_epochs):
         # Ensure distinct shuffling across processes each epoch
         if isinstance(recon_dataloader.sampler, DistributedSampler):
             recon_dataloader.sampler.set_epoch(epoch)
         epoch_loss = 0.0
         epoch_loss_analysis = 0.0
-
-        # Accumulators for epoch-wide MAE metrics
-        total_mae_expected_sum = 0.0  # classification (expected-count)
-        total_mae_argmax_sum = 0.0    # classification (argmax)
         grad_norm_sampled = None
 
         for b_idx, batch in enumerate(recon_dataloader):
-            images = batch["image"].to(device).float()
-            recon_loss = batch[recon_loss_key].to(device).float().unsqueeze(1)
-            k_value = batch["k_value"].to(device).float().unsqueeze(1)  
+            # Model input: scalar reconstruction error per sample
+            reconstruction_loss_value = batch[reconstruction_loss].to(device).float().unsqueeze(1)
+            # Training labels for GaussianCrossEntropyLoss: integer class indices in [1..C]
+            k_value = batch["k_value"].to(device).long().view(-1)
 
             optimizer.zero_grad()
 
             # Forward:
             #  - classification: logits [B, C] where classes 1..C map to counts 1..C
             #  - regression: output [B, 1] with scaled target
-            logits = token_count_predictor(images, recon_loss)
+            logits = token_count_predictor(reconstruction_loss_value)
 
-            if is_reg:
-                # Scale target to [0,1]: y = (K-1)/(C-1)
-                y = (k_value - 1.0) / float(num_classes - 1)
+            # Cross-entropy-like loss (Gaussian soft targets) for training
+            loss = training_loss(logits, k_value)
 
-                # loss is MAE between model output and scaled target
-                # logits here are actually a scalar output [B,1]
-                loss = training_loss(logits, y)
-
-                # Use the model prediction (not the target!) to compute token-count MAE
-                pred_y = logits.clamp(0.0, 1.0)  # [B,1] → scaled prediction
-                pred_k = (pred_y * (num_classes - 1) + 1.0).round().clamp(1, num_classes)
-
-                # Per-sample MAE and epoch accumulation
-                loss_analysis = mae_loss(pred_k, k_value)
-
-            else:
-                # Your Gaussian-CE expects float K; keep as-is
-                loss = training_loss(logits, k_value)
-                # For analysis, prefer expected-count MAE which aligns with soft targets
-                prob = torch.softmax(logits, dim=1)
-                classes = torch.arange(1, num_classes + 1, device=logits.device, dtype=prob.dtype).unsqueeze(0)
-                expected_count = (prob * classes).sum(dim=1)
-
-                # Also compute argmax-based MAE for reference
-                predicted_token_count = token_count_predictor.logits_to_token_count(logits).float()
-                per_mae_expected = mae_loss(expected_count, k_value)  # [B]
-                per_mae_argmax = mae_loss(predicted_token_count, k_value)  # [B]
-
-                # Use expected-count MAE as the main analysis metric (batch mean)
-                loss_analysis = per_mae_expected
-
-                total_mae_expected_sum += float(per_mae_expected.sum().item())
-                total_mae_argmax_sum += float(per_mae_argmax.sum().item())
+            # Analysis metric: absolute error in token counts (MAE)
+            # Predict class via argmax over logits. Our class space is 1..C, so add 1.
+            pred_class = logits.argmax(dim=1) + 1  # [B]
+            loss_analysis = analysis_loss(pred_class.float(), k_value.float())
                 
-
             # Backprop + optimization step
             loss.backward()
 
@@ -315,8 +256,6 @@ def main(cfg: DictConfig):
 
             epoch_loss += float(loss.item())
             epoch_loss_analysis += float(loss_analysis.item())
-            if is_main_process():
-                print(f"batch Loss: {loss_analysis.item():.6f}")
 
 
         # ---------------------------
@@ -345,19 +284,18 @@ def main(cfg: DictConfig):
         # - On single GPU (no dist), this block just uses the local values.
         # ---------------------------
         loss_sum = torch.tensor(epoch_loss, device=device, dtype=torch.float32)
-        lossA_sum = torch.tensor(epoch_loss_analysis, device=device, dtype=torch.float32)
+        analysis_sum = torch.tensor(epoch_loss_analysis, device=device, dtype=torch.float32)
         n_batches = torch.tensor(len(recon_dataloader), device=device, dtype=torch.float32)
         if dist_is_initialized():
             dist.all_reduce(loss_sum, op=dist.ReduceOp.SUM)
-            dist.all_reduce(lossA_sum, op=dist.ReduceOp.SUM)
+            dist.all_reduce(analysis_sum, op=dist.ReduceOp.SUM)
             dist.all_reduce(n_batches, op=dist.ReduceOp.SUM)
         avg_loss = (loss_sum / n_batches).item()
-        avg_loss_analysis = (lossA_sum / n_batches).item()
+        avg_loss_analysis = (analysis_sum / n_batches).item()
 
         if is_main_process():
             print(
-                f"Epoch {epoch + 1}/{num_epochs}, Avg Loss: {avg_loss:.6f}, "
-                f"Avg Loss Analysis (MAE): {avg_loss_analysis:.6f}")
+                f"Epoch {epoch + 1}/{num_epochs}, Avg Loss: {avg_loss:.6f}, Avg Loss Analysis: {avg_loss_analysis:.6f}")
         
 
         # ---------------------------
@@ -367,20 +305,11 @@ def main(cfg: DictConfig):
         log_dict = {
             "epoch": epoch + 1,
             "avg_loss": avg_loss,
-            "avg_loss_analysis": avg_loss_analysis,
+            "avg_loss_analysis": avg_loss_analysis,  # average absolute error in token counts
         }
         if grad_norm_sampled is not None:
             log_dict["grad_norm_sampled"] = float(grad_norm_sampled)
-        # if total_samples > 0:
-        #     if is_reg:
-        #         log_dict.update({
-        #             "mae_epoch": total_mae_reg_sum / float(dataset_size),
-        #         })
-        #     else:
-        #         log_dict.update({
-        #             "mae_expected_epoch": total_mae_expected_sum / float(dataset_size),
-        #             "mae_argmax_epoch": total_mae_argmax_sum / float(dataset_size),
-        #         })
+        
         if is_main_process():
             wandb.log(log_dict)
 
@@ -414,3 +343,6 @@ if __name__ == "__main__":
         # Clean up process group (safe to call even if not initialized)
         if dist_is_initialized():
             dist.destroy_process_group()
+
+
+
