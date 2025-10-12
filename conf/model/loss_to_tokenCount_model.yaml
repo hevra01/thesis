@@ -1,0 +1,22 @@
+# Hydra config for the scalar-loss → token-count classifier
+# Instantiates: models.loss_to_tokenCount_model.LossToTokenCountModel
+
+_target_: models.loss_to_tokenCount_model.LossToTokenCountModel
+
+# Number of classes (token counts in [1..num_classes])
+num_classes: 256
+
+# MLP hidden layers: input (1) -> hidden_sizes -> output (num_classes)
+hidden_sizes: [32, 64, 128, 512, 128, 64]
+
+# Activation between layers: relu | gelu | silu | tanh
+activation: silu
+
+# Dropout probability between hidden layers (0.0 disables)
+dropout: 0.0
+
+# Preprocessing on the scalar loss before the MLP
+# - use_log1p: apply y = log(1 + loss) to compress large values
+# - affine_preact: learnable scale+bias on the (optionally log1p-ed) input
+use_log1p: true
+affine_preact: true
