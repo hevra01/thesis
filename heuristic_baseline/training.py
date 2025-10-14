@@ -83,31 +83,38 @@ def main(cfg: DictConfig):
     with open(cfg.experiment.reconstruction_dataset.reconstruction_data_path, "r") as f:
         reconstruction_data = json.load(f)
 
-    # for the heuristic baseline we need the edge ratio information as a proxy for complexity
-    with open(cfg.experiment.reconstruction_dataset.edge_ratio_path, "r") as f:
-        edge_ratio_information = json.load(f)
+    # Feature toggles and optional JSON loads
+    rd_cfg = cfg.experiment.reconstruction_dataset
+    use_edge = bool(getattr(rd_cfg, "use_edge_ratio", False))
+    use_lid = bool(getattr(rd_cfg, "use_lid", False))
+    use_ld = bool(getattr(rd_cfg, "use_local_density", False))
+
+    edge_ratio_information = None
+    lid_information = None
+    local_density_information = None
+
+    if use_edge:
+        with open(rd_cfg.edge_ratio_path, "r") as f:
+            edge_ratio_information = json.load(f)
+    if use_lid:
+        with open(rd_cfg.lid_path, "r") as f:
+            lid_information = json.load(f)
+    if use_ld:
+        with open(rd_cfg.local_density_path, "r") as f:
+            local_density_information = json.load(f)
 
     # this is just to get the images from the dataloader to be used by ReconstructionDataset
     dataloader = instantiate(cfg.experiment.dataset)
 
-    # This dataset holds the mse_errors, vgg_errors for all the images for different 
-    # values of k_values and the  bpp.
-    # Optional filtering to constrain error range (e.g., near-constant difficulty)
-    filt_cfg = getattr(cfg.experiment.reconstruction_dataset, "filter", "vgg_error")
-    if filt_cfg is not None:
-        filter_key = getattr(filt_cfg, "key", None)
-        min_error = getattr(filt_cfg, "min", None)
-        max_error = getattr(filt_cfg, "max", None)
-    else:
-        filter_key = min_error = max_error = None
-
     # Dataset
+    recon_loss_key = rd_cfg.reconstruction_loss
     recon_dataset = ReconstructionDataset_Heuristic(
         reconstruction_data=reconstruction_data,
-        edge_ratio_information=edge_ratio_information,
-        filter_key=filter_key,
-        min_error=min_error,
-        max_error=max_error,
+        edge_ratio_information=edge_ratio_information if use_edge else None,
+        filter_key=getattr(rd_cfg, "filter", {}).get("key", None) if hasattr(rd_cfg, "filter") else None,
+        min_error=getattr(rd_cfg, "filter", {}).get("min", None) if hasattr(rd_cfg, "filter") else None,
+        max_error=getattr(rd_cfg, "filter", {}).get("max", None) if hasattr(rd_cfg, "filter") else None,
+        error_key=recon_loss_key,
     )
 
     # DataLoader with optional DistributedSampler
@@ -148,14 +155,23 @@ def main(cfg: DictConfig):
         )
 
     optimizer = instantiate(cfg.experiment.optimizer, params=token_count_predictor.parameters())
-    loss = instantiate(cfg.experiment.training.loss)
+    training_loss = instantiate(cfg.experiment.training.loss_training)
+    analysis_loss = instantiate(cfg.experiment.training.loss_analysis)
+
+    # Determine expected in_dim from toggles (1 for recon loss + enabled features)
+    expected_in_dim = 1 + int(use_edge) + int(use_lid) + int(use_ld)
+    model_ref = token_count_predictor.module if isinstance(token_count_predictor, torch.nn.parallel.DistributedDataParallel) else token_count_predictor
+    if hasattr(cfg.experiment, "model") and hasattr(cfg.experiment.model, "in_dim"):
+        cfg_in_dim = int(cfg.experiment.model.in_dim)
+        if cfg_in_dim != expected_in_dim:
+            if is_main_process():
+                print(f"Warning: model.in_dim ({cfg_in_dim}) != expected_in_dim from toggles ({expected_in_dim}). Proceeding anyway.")
 
     # ----- Scale configuration for loss -----
     # We keep the model output range as configured (typically [1, 256]) but
     # compute the loss in a normalized [0,1] space for numerical stability.
     #   y01 = (y - k_min) / (k_max - k_min)
     # Read the min/max from the model to avoid hard-coding.
-    model_ref = token_count_predictor.module if isinstance(token_count_predictor, torch.nn.parallel.DistributedDataParallel) else token_count_predictor
     k_min = float(getattr(model_ref, "output_min", 1.0))
     k_max = float(getattr(model_ref, "output_max", 256.0))
     k_range = max(k_max - k_min, 1.0)
@@ -190,6 +206,7 @@ def main(cfg: DictConfig):
         print("len(recon_dataloader):", len(recon_dataloader))
         dataset_size = len(recon_dataloader.dataset)
         print("dataset_size:", dataset_size)
+        print("model", token_count_predictor)
     else:
         dataset_size = len(recon_dataloader.dataset)
 
@@ -201,49 +218,59 @@ def main(cfg: DictConfig):
         if isinstance(recon_dataloader.sampler, DistributedSampler):
             recon_dataloader.sampler.set_epoch(epoch)
         epoch_loss = 0.0
+        epoch_analysis_loss = 0.0
         token_count_predictor.train()
 
         for batch in recon_dataloader:
-            vgg_error = batch["vgg_error"].to(device).float().unsqueeze(1)
-            true_token_count = batch["k_value"].to(device).float().unsqueeze(1)
+            # Build features [B, in_dim] from selected signals
+            feats = [batch[recon_loss_key].to(device).float().unsqueeze(1)]
+            if use_edge:
+                feats.append(batch["edge_ratio"].to(device).float().unsqueeze(1))
+            if use_lid:
+                feats.append(batch["lid"].to(device).float().unsqueeze(1))
+            if use_ld:
+                feats.append(batch["local_density"].to(device).float().unsqueeze(1))
+            x = torch.cat(feats, dim=1)
+
+            true_token_count = batch["k_value"].to(device).float().view(-1)
 
             optimizer.zero_grad()
-            edge_ratio = batch["edge_ratio"].to(device).float().unsqueeze(1)
 
-            # Forward: model returns token-count prediction in [k_min, k_max]
-            token_count_prediction = token_count_predictor(edge_ratio, vgg_error)
+            # Forward: classifier logits over [1..C]
+            logits = token_count_predictor(x)
 
-            # ----- Compute loss on scaled [0,1] values -----
-            # Why: reduces dynamic range, stabilizes gradients and learning rates,
-            # and makes the optimization less sensitive to absolute scale.
-            # Scale both prediction and target to [0,1]:
-            #   y01 = (y - k_min) / (k_max - k_min)
-            pred_token_scaled = ((token_count_prediction - k_min) / k_range).clamp(0.0, 1.0)
-            true_token_scaled = ((true_token_count - k_min) / k_range).clamp(0.0, 1.0)
+            # Training loss (Gaussian CE): counts expected [B] or [B,1]
+            current_loss = training_loss(logits, true_token_count)
 
-            # Loss (e.g., MAE) on scaled values
-            current_loss = loss(pred_token_scaled, true_token_scaled).mean()
+            # Analysis metric: MAE on counts via argmax
+            pred_class = logits.argmax(dim=1) + 1
+            loss_analysis = analysis_loss(pred_class.float(), true_token_count.float())
 
             current_loss.backward()
             optimizer.step()
 
             epoch_loss += float(current_loss.item())
+            epoch_analysis_loss += float(loss_analysis.item())
 
         # Global mean-of-batches across ranks
         loss_sum = torch.tensor(epoch_loss, device=device, dtype=torch.float32)
         n_batches = torch.tensor(len(recon_dataloader), device=device, dtype=torch.float32)
+        epoch_analysis_loss = torch.tensor(epoch_analysis_loss, device=device, dtype=torch.float32)
         if dist_is_initialized():
             dist.all_reduce(loss_sum, op=dist.ReduceOp.SUM)
             dist.all_reduce(n_batches, op=dist.ReduceOp.SUM)
+            dist.all_reduce(epoch_analysis_loss, op=dist.ReduceOp.SUM)
         avg_loss = (loss_sum / n_batches).item()
+        avg_analysis_loss = (epoch_analysis_loss / n_batches).item()
 
         if is_main_process():
-            print(f"Epoch {epoch + 1}/{num_epochs}, Avg Loss: {avg_loss:.6f}")
+            print(f"Epoch {epoch + 1}/{num_epochs}, Avg Loss: {avg_loss:.6f}, Avg Analysis Loss: {avg_analysis_loss:.6f}")
 
             # ✅ Log to Weights & Biases
             wandb.log({
                 "epoch": epoch + 1,
                 "avg_loss": avg_loss,
+                "avg_loss_analysis": avg_analysis_loss,
             })
 
             # Save/overwrite the single checkpoint file
@@ -258,6 +285,7 @@ def main(cfg: DictConfig):
                     "model_state_dict": state_dict,
                     "optimizer_state_dict": optimizer.state_dict(),
                     "loss": avg_loss,
+                    "analysis_loss": avg_analysis_loss,
                 },
                 checkpoint_path,
             )
