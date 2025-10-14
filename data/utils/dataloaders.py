@@ -309,20 +309,29 @@ class ReconstructionDataset_Neural(Dataset):
 class ReconstructionDataset_Heuristic(Dataset):
     """
     this is different from ReconstructionDataset_token_based in the sense that this also has the edge information.
+    Optionally, it can include additional per-image scalar features such as LID and local density.
     """
-    def __init__(self, reconstruction_data, edge_ratio_information, 
+    def __init__(self, reconstruction_data, edge_ratio_information=None,
+                 lid_information=None, local_density_information=None,
                  filter_key: str | None = None,
-                min_error: float | None = None,
-                max_error: float | None = None):
+                 min_error: float | None = None,
+                 max_error: float | None = None,
+                 error_key: str = "vgg_error",):
         """
         Args:
             reconstruction_data (list): List of dicts containing reconstruction metrics.
-                (img, k_value, mse_error, vgg_error).
-            edge_ratio_information (list): List of edge ratio information for each image.
-            dataloader (DataLoader): Dataloader from which images can be fetched.
+                (img_id, k_value, mse_error, vgg_error, ...).
+            edge_ratio_information (list|dict|None): Per-image edge ratio values.
+            lid_information (list|dict|None): Per-image LID values.
+            local_density_information (list|dict|None): Per-image local density values.
+            filter_key (str|None): Optional key in reconstruction_data to filter by value range.
+            min_error, max_error (float|None): Inclusive bounds for filtering.
+            error_key (str): Name of the error field in reconstruction_data to expose in samples.
         """
         self.reconstruction_data = reconstruction_data
         self.edge_ratio_information = edge_ratio_information
+        self.lid_information = lid_information
+        self.local_density_information = local_density_information
 
         # Apply optional filtering on the provided error field
         self.num_original = len(reconstruction_data)
@@ -336,7 +345,6 @@ class ReconstructionDataset_Heuristic(Dataset):
                     missing_key += 1
                     continue
                 v = d[filter_key]
-                # tolerate nested structures but we expect scalars
                 try:
                     val = float(v)
                 except (TypeError, ValueError):
@@ -354,25 +362,33 @@ class ReconstructionDataset_Heuristic(Dataset):
             self.missing_key_count = 0
 
         self.num_kept = len(self.reconstruction_data)
+        self.error_key = error_key
 
     def __len__(self):
-        # this will be the number of images * the number of k values for each image.
-        # e.g. for imagenet val, it is 50000 * len([1, 2, 4, 8, 16, 32, 64, 128, 180, 256]) = 500000
         return len(self.reconstruction_data)
 
     def __getitem__(self, idx):
         """
-        Returns:
-            dict: Contains image ID, k value, MSE error, vgg error (or any other error) and compression rate.
+        Returns a dict with:
+          - error value under `self.error_key`
+          - k_value (int)
+          - optionally: edge_ratio, lid, local_density if the corresponding info was provided
+          - image_id (int) for traceability
         """
         data_point = self.reconstruction_data[idx]
         k_value = data_point["k_value"]
-        vgg_error = data_point["vgg_error"]
+        err_val = data_point[self.error_key]
         image_id = data_point["image_id"]
-        edge_ratio = self.edge_ratio_information[image_id]  # get the edge ratio for this image
 
-        return {
-            "vgg_error": vgg_error,
+        out = {
+            self.error_key: err_val,
             "k_value": k_value,
-            "edge_ratio": edge_ratio 
+            "image_id": image_id,
         }
+        if self.edge_ratio_information is not None:
+            out["edge_ratio"] = self.edge_ratio_information[image_id]
+        if self.lid_information is not None:
+            out["lid"] = self.lid_information[image_id]
+        if self.local_density_information is not None:
+            out["local_density"] = self.local_density_information[image_id]
+        return out
