@@ -1,0 +1,57 @@
+defaults:
+  - /model: token_predictor_heuristic_baseline
+  - /dataset: imageNet
+
+optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.0001
+
+training:
+  num_epochs: 500
+  loss_training:
+    _target_: reconstruction_loss.GaussianCrossEntropyLoss
+  loss_analysis:
+    _target_: reconstruction_loss.MAELoss
+
+# ---------------------------------------------
+# Reconstruction dataset and feature toggles
+# ---------------------------------------------
+reconstruction_dataset:
+  reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
+  batch_size: 120
+  shuffle: true
+  reconstruction_loss: "mse_error"   # field name in reconstruction_data to use as the loss feature
+
+  # Feature toggles: enable/disable auxiliary features to concatenate with the reconstruction loss
+  use_edge_ratio: false
+  edge_ratio_path: "data/datasets/imageNet_edge_ratios/train_imageNet_edge_ratios.json"
+
+  use_lid: true
+  lid_path: "data/datasets/imageNet_LID_values/training_set/all_lids.json"          # path to JSON (dict or list indexed by image_id)
+
+  use_local_density: false
+  local_density_path: "data/datasets/density/train_imageNet_local_density.json"  # path to JSON (dict or list indexed by image_id)
+
+  # Optional filtering of samples by an error metric
+  # filter:
+  #   key: vgg_error
+  #   min: 2.83040
+  #   max: 2.83640
+
+# ---------------------------------------------
+# Model overrides
+# Ensure in_dim equals 1 (recon loss) + sum(enabled auxiliary features)
+# With the defaults above (edge_ratio enabled only), in_dim = 2.
+model:
+  mode: classification            # training uses GaussianCrossEntropyLoss
+  in_dim: 2                       # adjust to 1 + (use_edge_ratio) + (use_lid) + (use_local_density)
+  num_classes: 256
+
+checkpoint_path: "neural_baseline/checkpoint/heuristic_smallData_LID_mse.pt"
+
+dataset:
+  split: "train"
+
+experiment_name: "heuristic_smallData_LID_mse"
+device: "cuda"
+

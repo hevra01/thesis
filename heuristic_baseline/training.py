@@ -111,6 +111,8 @@ def main(cfg: DictConfig):
     recon_dataset = ReconstructionDataset_Heuristic(
         reconstruction_data=reconstruction_data,
         edge_ratio_information=edge_ratio_information if use_edge else None,
+        lid_information=lid_information if use_lid else None,
+        local_density_information=local_density_information if use_ld else None,
         filter_key=getattr(rd_cfg, "filter", {}).get("key", None) if hasattr(rd_cfg, "filter") else None,
         min_error=getattr(rd_cfg, "filter", {}).get("min", None) if hasattr(rd_cfg, "filter") else None,
         max_error=getattr(rd_cfg, "filter", {}).get("max", None) if hasattr(rd_cfg, "filter") else None,
@@ -207,6 +209,9 @@ def main(cfg: DictConfig):
         dataset_size = len(recon_dataloader.dataset)
         print("dataset_size:", dataset_size)
         print("model", token_count_predictor)
+        # Count only trainable parameters
+        num_params = sum(p.numel() for p in token_count_predictor.parameters() if p.requires_grad)
+        print(f"Number of trainable parameters: {num_params:,}")
     else:
         dataset_size = len(recon_dataloader.dataset)
 

@@ -52,7 +52,7 @@ transformer_dim: 256                   # internal d_model; will project conv C -
 # A self-attention block (learns relationships between tokens),
 # A feed-forward block (MLP to mix information).
 # This sets how many Transformer blocks you stack on top of each other.
-transformer_layers: 4
+transformer_layers: 16
 transformer_nhead: 8
 transformer_mlp_ratio: 4.0
 transformer_dropout: 0.1
@@ -83,4 +83,4 @@ loss_proj_dim: 164                        # embed cond → this many dims (share
 #       • Requires conv_channels not empty. Safe to use together with after_backbone.
 #   - head: concatenate the loss embedding right before the final FC head (on the pooled/flattened features).
 # Example: [after_backbone, adaln] or [transformer_token, head]
-conditioning_locations: [transformer_token]
+conditioning_locations: [adaln]
