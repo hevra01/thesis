@@ -3,6 +3,8 @@ import torch.nn as nn
 from torchvision import models
 import torchvision.transforms.functional as TF
 import torch.nn.functional as F
+from typing import Optional
+import lpips as _lpips  # https://github.com/richzhang/PerceptualSimilarity
 
 
 class VGGPerceptualLoss(nn.Module):
@@ -295,3 +297,69 @@ class GaussianCrossEntropyLoss(nn.Module):
 
         # Step 4: Average over batch
         return loss.mean()
+
+
+class LPIPSLoss(nn.Module):
+    """
+    Learned Perceptual Image Patch Similarity (LPIPS) loss wrapper using the
+    official "lpips" package by Zhang et al.
+
+    Args:
+        net (str): backbone for feature network. Common: 'vgg' | 'alex' | 'squeeze'.
+        reduction (str): 'mean' to average over batch and return a scalar,
+                         'none' to return per-sample vector [B].
+        backend (str): Ignored; kept for backward compatibility.
+        normalize_to_minus1_1 (bool): If True, assumes inputs are in [0,1] and maps
+                         them to [-1,1], which LPIPS expects. Set False if inputs
+                         are already in [-1,1].
+
+    Usage:
+        loss_fn = LPIPSLoss(net='vgg', reduction='mean')
+        loss = loss_fn(x, y)  # x,y in [0,1] by default; returns scalar if reduction='mean'
+    """
+    def __init__(
+        self,
+        net: str = "vgg",
+        reduction: str = "mean",
+        backend: str = "auto",
+        normalize_to_minus1_1: bool = True,
+    ):
+        super().__init__()
+        self.net = net
+        self.reduction = reduction
+        self.normalize_to_minus1_1 = bool(normalize_to_minus1_1)
+
+        if _lpips is None:
+            raise ImportError(
+                "lpips package not found. Please install with: pip install lpips"
+            )
+
+        # Always use lpips backend and freeze its parameters
+        self.backend = "lpips"
+        self.model = _lpips.LPIPS(net=self.net)
+        self.model.eval()
+        for p in self.model.parameters():
+            p.requires_grad = False
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        # Ensure same device/dtype
+        if self.model is not None and next(self.model.parameters(), None) is not None:
+            self.model = self.model.to(x.device)
+
+        # LPIPS expects inputs in [-1, 1]. Map if we think we are in [0,1].
+        if self.normalize_to_minus1_1:
+            x_in = x * 2.0 - 1.0
+            y_in = y * 2.0 - 1.0
+        else:
+            x_in, y_in = x, y
+
+        # lpips returns a tensor of shape [B, 1, 1, 1] (or [B,1,1]) depending on version
+        out = self.model(x_in, y_in)
+        # Flatten per-sample values to [B]
+        out = out.view(out.size(0), -1).mean(dim=1)
+
+        if self.reduction == "mean":
+            return out.mean()
+        if self.reduction == "none":
+            return out
+        raise ValueError(f"Unsupported reduction: {self.reduction}")
