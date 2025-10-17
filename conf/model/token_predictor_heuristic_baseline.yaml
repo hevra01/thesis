@@ -35,5 +35,5 @@ output_max: 256.0
 # - use_log1p: apply log(1 + x) per feature (useful for heavy-tailed inputs)
 # - affine_preact: learnable per-feature scale and bias before the MLP
 # For the heuristic baseline we keep both disabled.
-use_log1p: true
+use_log1p: false
 affine_preact: true

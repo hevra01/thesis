@@ -144,6 +144,26 @@ def main(cfg: DictConfig):
         persistent_workers=True if num_workers and num_workers > 0 else False,
     )
 
+    # Strict mode: require stats provided in config if standardize=True
+    mdl_cfg = cfg.experiment.model if hasattr(cfg.experiment, "model") else None
+    if mdl_cfg is not None and bool(getattr(mdl_cfg, "standardize", False)):
+        means = getattr(mdl_cfg, "standardize_mean", None)
+        stds = getattr(mdl_cfg, "standardize_std", None)
+        if means is None or stds is None:
+            raise RuntimeError(
+                "Model standardize=True but standardize_mean/std not provided in config.\n"
+                "Please precompute feature stats (after the chosen log transform) in a separate script\n"
+                "and set: experiment.model.standardize_mean: [..] and experiment.model.standardize_std: [..]"
+            )
+        # Validate lengths against the active features
+        expected_in_dim = 1 + int(use_edge) + int(use_lid) + int(use_ld)
+        if len(means) != expected_in_dim or len(stds) != expected_in_dim:
+            feature_order = ["reconstruction_loss"] + (["edge_ratio"] if use_edge else []) + (["lid"] if use_lid else []) + (["local_density"] if use_ld else [])
+            raise RuntimeError(
+                "Length of standardize_mean/std must match the number of active features.\n"
+                f"Expected in_dim={expected_in_dim} with order {feature_order}, got mean={len(means)}, std={len(stds)}."
+            )
+
     # ---------------------------
     # Model, optimizer, loss
     # ---------------------------

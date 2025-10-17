@@ -40,7 +40,20 @@ class HeuristicTokenCountPredictor(nn.Module):
         output_min: Optional[float] = None,
         output_max: Optional[float] = None,
         # preprocessing
-        use_log1p: bool = True,
+    # You can pass either a single bool or a list[bool] length==in_dim.
+    # If a list is provided, the transform is applied per feature.
+    use_log1p: bool | Iterable[bool] = True,
+        # If True, applies a signed log transform per feature: sign(x) * log1p(|x|).
+        # This is robust to heavy-tailed distributions and preserves information for
+        # negative-valued features like LID (where plain log1p with clamp would lose sign).
+    use_signed_log1p: bool | Iterable[bool] = False,
+        # After (optional) log transform, optionally standardize per feature:
+        # x := (x - mean) / (std + eps). Provide means/stds via standardize_mean/std
+        # (length == in_dim). If not provided, set standardize=False or set later via
+        # set_standardization_stats(...).
+        standardize: bool = False,
+        standardize_mean: Optional[Iterable[float]] = None,
+        standardize_std: Optional[Iterable[float]] = None,
         affine_preact: bool = True,
     ) -> None:
         super().__init__()
@@ -48,7 +61,29 @@ class HeuristicTokenCountPredictor(nn.Module):
         # however, if it is 2, it means that we are using some heuristic features (e.g. edge ratio, LID value, local density, etc)
         assert in_dim >= 1, "in_dim must be >= 1"
         self.in_dim = int(in_dim)
-        self.use_log1p = bool(use_log1p)
+        # Input transforms: order is (log transform) -> (standardize) -> (learnable affine)
+        # Normalize transform specs to boolean masks of length F (in_dim)
+        def _to_bool_mask(spec, F, name: str) -> torch.Tensor:
+            """Convert a bool or iterable of bools to a torch.bool mask [F]."""
+            if isinstance(spec, bool):
+                return torch.tensor([spec] * F, dtype=torch.bool)
+            # Accept list/tuple/iterable; cast to list of bools
+            try:
+                vals = [bool(v) for v in list(spec)]
+            except Exception as e:
+                raise ValueError(f"{name} must be a bool or an iterable of bools (len==in_dim). Error: {e}")
+            if len(vals) != F:
+                raise ValueError(f"{name} length {len(vals)} != in_dim {F}")
+            return torch.tensor(vals, dtype=torch.bool)
+
+        self.use_log1p_mask = _to_bool_mask(use_log1p, self.in_dim, "use_log1p")
+        self.use_signed_log1p_mask = _to_bool_mask(use_signed_log1p, self.in_dim, "use_signed_log1p")
+        # Signed log has precedence over unsigned log1p per feature
+        self.use_log1p_effective = self.use_log1p_mask & (~self.use_signed_log1p_mask)
+        # Register masks as buffers so they move with .to(device)
+        self.register_buffer("_mask_log1p", self.use_log1p_effective)
+        self.register_buffer("_mask_signed", self.use_signed_log1p_mask)
+        self.standardize = bool(standardize)
         self.affine_preact = bool(affine_preact)
         self.mode = mode.lower()
         assert self.mode in {"regression", "classification"}
@@ -65,6 +100,28 @@ class HeuristicTokenCountPredictor(nn.Module):
         else:
             self.register_parameter("input_scale", None)
             self.register_parameter("input_bias", None)
+
+        # Optional fixed standardization stats (registered as buffers so they move with .to(device))
+        # These are applied AFTER log/log1p transforms, BEFORE learnable affine.
+        if self.standardize:
+            # Initialize from provided values or sensible defaults.
+            if standardize_mean is None:
+                mean_tensor = torch.zeros(self.in_dim, dtype=torch.float32)
+            else:
+                mean_tensor = torch.tensor(list(standardize_mean), dtype=torch.float32)
+                assert mean_tensor.numel() == self.in_dim, "standardize_mean length must match in_dim"
+
+            if standardize_std is None:
+                std_tensor = torch.ones(self.in_dim, dtype=torch.float32)
+            else:
+                std_tensor = torch.tensor(list(standardize_std), dtype=torch.float32)
+                assert std_tensor.numel() == self.in_dim, "standardize_std length must match in_dim"
+
+            self.register_buffer("norm_mean", mean_tensor)
+            self.register_buffer("norm_std", std_tensor)
+        else:
+            self.register_buffer("norm_mean", None)
+            self.register_buffer("norm_std", None)
 
         # Build MLP
         Act = _make_act(activation)
@@ -148,11 +205,30 @@ class HeuristicTokenCountPredictor(nn.Module):
             x = x.reshape(-1, F)  # [B,F]
 
         # --- Feature-wise transforms --------------------------------------------
-        # log1p: applied independently per feature. We clamp at 0 to avoid log of negatives.
-        if self.use_log1p:
-            # NOTE: If some features can be negative and you still want them, you could
-            # either (a) shift them, or (b) disable log1p. For now, we clamp at 0.
-            x = torch.log1p(torch.clamp(x, min=0))
+        # 1) Log transforms (optional, per feature)
+        #    We support two masks:
+        #      - _mask_signed: apply signed log1p: sign(x) * log1p(|x|)
+        #      - _mask_log1p:  apply unsigned log1p: log1p(clamp(x, 0))
+        #    Signed log takes precedence; i.e., if a feature is in _mask_signed,
+        #    it will NOT also receive unsigned log1p.
+        Fmask = (slice(None), slice(None))  # placeholder for readability
+        if self._mask_signed.any():
+            signed = torch.sign(x) * torch.log1p(torch.abs(x))
+            x = torch.where(self._mask_signed.view(1, F), signed, x)
+        if self._mask_log1p.any():
+            safe = torch.log1p(torch.clamp(x, min=0))
+            x = torch.where(self._mask_log1p.view(1, F), safe, x)
+
+        # 2) Standardization (optional): x := (x - mean) / (std + eps)
+        if self.standardize:
+            if self.norm_mean is None or self.norm_std is None:
+                raise RuntimeError(
+                    "standardize=True but normalization stats are not set. "
+                    "Provide standardize_mean/std in the constructor or call "
+                    "set_standardization_stats(mean, std)."
+                )
+            eps = 1e-8
+            x = (x - self.norm_mean.view(1, F)) / (self.norm_std.view(1, F) + eps)
 
         # Learnable per-feature affine: y_i = scale_i * x_i + bias_i.
         # Broadcasting via (1, F) ensures each column gets its own parameters.
@@ -161,6 +237,26 @@ class HeuristicTokenCountPredictor(nn.Module):
             x = x * self.input_scale.view(1, F) + self.input_bias.view(1, F)
 
         return x
+
+    @torch.no_grad()
+    def set_standardization_stats(self, mean: Iterable[float], std: Iterable[float]):
+        """Set per-feature normalization stats to be used when standardize=True.
+
+        Call this if you want to compute mean/std offline (e.g., on the training set)
+        and then bake them into the model for reproducible scaling.
+
+        Args:
+            mean: iterable of length in_dim with per-feature means (after any log transform you intend to use).
+            std:  iterable of length in_dim with per-feature stddevs (non-zero; we add eps internally).
+        """
+        if not self.standardize:
+            raise RuntimeError("Enable standardize=True to use standardization stats.")
+        mean_t = torch.tensor(list(mean), dtype=torch.float32, device=self.input_scale.device if self.affine_preact else None)
+        std_t = torch.tensor(list(std), dtype=torch.float32, device=self.input_scale.device if self.affine_preact else None)
+        assert mean_t.numel() == self.in_dim and std_t.numel() == self.in_dim, "Stats length must match in_dim"
+        # Register/overwrite buffers so they move with .to(device)
+        self.register_buffer("norm_mean", mean_t)
+        self.register_buffer("norm_std", std_t)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self._preprocess(x)

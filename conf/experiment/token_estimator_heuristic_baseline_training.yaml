@@ -4,10 +4,10 @@ defaults:
 
 optimizer:
   _target_: torch.optim.Adam
-  lr: 0.0001
+  lr: 0.001
 
 training:
-  num_epochs: 500
+  num_epochs: 800
   loss_training:
     _target_: reconstruction_loss.GaussianCrossEntropyLoss
   loss_analysis:
@@ -20,7 +20,7 @@ reconstruction_dataset:
   reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
   batch_size: 120
   shuffle: true
-  reconstruction_loss: "mse_error"   # field name in reconstruction_data to use as the loss feature
+  reconstruction_loss: "vgg_error"   # field name in reconstruction_data to use as the loss feature
 
   # Feature toggles: enable/disable auxiliary features to concatenate with the reconstruction loss
   use_edge_ratio: false
@@ -46,12 +46,36 @@ model:
   mode: classification            # training uses GaussianCrossEntropyLoss
   in_dim: 2                       # adjust to 1 + (use_edge_ratio) + (use_lid) + (use_local_density)
   num_classes: 256
+  # -----------------------------
+  # Preprocessing overrides (applied inside the model)
+  # We recommend signed log1p for heterogeneous ranges (e.g., LID can be negative and huge)
+  # Per-feature transform masks (length must equal in_dim). With current toggles, order is [mse_error, lid].
+  # Example: do not transform MSE (already small), use signed log for LID.
+  use_signed_log1p: [false, false]
+  standardize: true              # require per-feature mean/std below (length must equal in_dim)
+  # IMPORTANT: Order of features is exactly how the training script builds the tensor:
+  #   [ reconstruction_loss, (edge_ratio if enabled), (lid if enabled), (local_density if enabled) ]
+  # With the toggles above (use_lid: true, others false), the order is [mse_error, lid]
+  # Replace the placeholders with your precomputed stats after applying the same log policy.
+  
+  # if applying log:
+  # Mean VGG Error (signed log1p): 1.3205, Std VGG Error (signed log1p): 0.2188
+  # Mean MSE Error (signed log1p): 0.1973, Std MSE Error (signed log1p): 0.0612
+  
+  # if applying no log:
+  # Mean VGG Error before log: 2.8324, Std VGG Error before log: 0.7998
+  # Mean MSE Error before log: 0.2203, Std MSE Error before log: 0.0754
 
-checkpoint_path: "neural_baseline/checkpoint/heuristic_smallData_LID_mse.pt"
+  # Mean LID (signed log1p): -5541565.5392, Std LID (signed log1p): 708356.6451
+
+  standardize_mean: [2.8324, -5541565.5392]   # [mean_mse_error_after_log, mean_lid_after_log]
+  standardize_std:  [0.7998, 708356.6451]   # [std_mse_error_after_log,  std_lid_after_log]
+
+checkpoint_path: "neural_baseline/checkpoint/heuristic_smallDatasdds_LID_mse_sdntsdszewest.pt"
 
 dataset:
   split: "train"
 
-experiment_name: "heuristic_smallData_LID_mse"
+experiment_name: "heuristic_AlllData_LID_vgg_no_log_high_lr"
 device: "cuda"
 
