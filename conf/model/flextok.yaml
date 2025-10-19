@@ -1,2 +1,2 @@
 _target_: flextok.flextok_wrapper.FlexTokFromHub.from_pretrained
-pretrained_model_name_or_path: EPFL-VILAB/flextok_d18_d28_in1k
+pretrained_model_name_or_path: EPFL-VILAB/flextok_d18_d18_in1k

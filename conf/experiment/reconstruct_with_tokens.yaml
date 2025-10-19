@@ -1,0 +1,23 @@
+# this yaml file is used for configuration of experiment to 
+# reconstruct images with different tokens counts. 
+defaults:
+  - /model: flextok
+
+# Where to write JSON results (a suffix _{start}_{end}.json is added automatically)
+output_path: "/BS/data_mani_compress/work/thesis/imagenet_reconstructed_train"
+
+# Compression rates to evaluate (keep first k tokens)
+k_keep_list: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+
+# Class index range to process (sorted WNIDs) [start_class_idx, end_class_idx)
+start_class_idx: 3
+end_class_idx: 4
+
+# Path to precomputed register token IDs (npz with token_ids [N,256])
+register_tokens_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"
+
+# Root of ImageNet train split to derive WNIDs and filenames
+data_root: "/scratch/inf0/user/mparcham/ILSVRC2012/train"
+
+# Batch size for detokenize calls and slicing math
+batch_size: 90
