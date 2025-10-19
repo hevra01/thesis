@@ -12,9 +12,8 @@
 #SBATCH --output logs/output_prep_%j.txt   # Stdout log file (unique per job)
 #SBATCH --error logs/error_prep_%j.txt     # Stderr log file (unique per job)
 
-#SBATCH --partition gpu22              # Partition to submit to (e.g., gpu24 is H100, 80GB VRAM)
+#SBATCH --partition a40              # Partition to submit to (e.g., gpu24 is H100, 80GB VRAM)
 #SBATCH --gres gpu:1                   # Request 1 GPU
-#SBATCH --mem 64G                      # Amount of RAM to allocate
 #SBATCH --cpus-per-task 4              # Number of CPU cores to allocate
 #SBATCH --time=1-0:0:0              # Max valid value less than 7-00:00:00
 #SBATCH --nodes 1                      # Number of nodes (machines)
