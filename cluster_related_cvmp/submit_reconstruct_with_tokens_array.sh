@@ -22,12 +22,19 @@
 
 # ---------------- Setup runtime environment ---------------- #
 
-# Ensure shell is properly initialized (for mamba)
-source ~/.bashrc
+module load slurm_setup
+module load cuda/12.1                     # Load CUDA module
+module load anaconda/3                    # Load Anaconda (adjust if needed)
 
-# Activate mamba (replace 'myenv' with your actual environment name)
-source /BS/data_mani_compress/work/miniforge3/etc/profile.d/conda.sh
-conda activate dgm_geometry
+# Activate your environment
+source ~/.bashrc
+conda activate thesis
+
+# Optionally load secrets or other setup files
+source /home/hevra/thesis/.wandb_secrets.sh
+
+# ---------------- Execution ---------------- #
+cd /anvme/workspace/v114be16-hevra/thesis
 
 
 # ---------------- Run your code ---------------- #
@@ -36,8 +43,8 @@ conda activate dgm_geometry
 EXPERIMENT_NAME=${EXPERIMENT_NAME:-reconstruct_with_tokens}
 
 # Class range chunking
-BASE_START_CLASS=${BASE_START_CLASS:-0}
-CLASSES_PER_JOB=${CLASSES_PER_JOB:-20}
+BASE_START_CLASS=${500:-0}
+CLASSES_PER_JOB=${CLASSES_PER_JOB:-35}
 
 TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 START_CLASS=$(( BASE_START_CLASS + TASK_ID * CLASSES_PER_JOB ))
@@ -49,6 +56,9 @@ ARGS=(
   experiment=$EXPERIMENT_NAME
   experiment.start_class_idx=$START_CLASS
   experiment.end_class_idx=$END_CLASS
+  experiment.output_path=anvme/workspace/v114be16-hevra/reconstruction_imagenet/train
+  experiment.register_tokens_path=anvme/workspace/v114be16-hevra/imagenet_register_tokens/imagnet_train_register_tokens.npz
+  experiment.data_root=anvme/workspace/v114be16-hevra/thesis/ILSVRC2012/train
 )
 
 python -u reconstruct_with_tokens.py "${ARGS[@]}"
