@@ -21,14 +21,15 @@
 
 # ---------------- Setup runtime environment ---------------- #
 
-module load python
 
 # Activate your environment
-source ~/.bashrc
+# Load conda correctly
+source /home/hpc/v114be/v114be16/.conda/etc/profile.d/conda.sh
 conda activate thesis
 
+
 # Optionally load secrets or other setup files
-source /home/hevra/thesis/.wandb_secrets.sh
+source /anvme/workspace/v114be16-hevra/thesis/.wandb_secrets.sh
 
 # ---------------- Execution ---------------- #
 cd /anvme/workspace/v114be16-hevra/thesis
