@@ -22,9 +22,7 @@
 
 # ---------------- Setup runtime environment ---------------- #
 
-module load slurm_setup
-module load cuda/12.1                     # Load CUDA module
-module load anaconda/3                    # Load Anaconda (adjust if needed)
+module load python
 
 # Activate your environment
 source ~/.bashrc
