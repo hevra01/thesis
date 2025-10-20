@@ -9,18 +9,8 @@ import wandb
 
 
 """
-Purpose
--------
-Reconstruct ImageNet images from precomputed token IDs and save them on disk under:
-        {output_path}/reconst_{k}/{WNID}/{original_filename}
-
-Output range
-------------
-FlexTok decoder produces images in [-1, 1]. We clamp to [-1,1], map to [0,1], and save.
-
-Default inference settings
---------------------------
-We keep timesteps=20 and guidance_scale=7.5 as defaults per the request.
+This file reconstructs images from token IDs stored in a .npz file using FlexTok using 
+different number of tokens.
 """
 
 
@@ -146,7 +136,7 @@ def main(cfg):
                         guidance_scale=guidance_scale, verbose=False,
                     )  # [-1,1]
                 for img_t, out_path in zip(reconstructed, out_paths):
-                    save_image(img_t, out_path)
+                    save_image(((img_t.clamp(-1, 1) + 1) / 2), out_path)
                     total_saved[int(k_keep)] += 1
 
         # Advance the global token offset by number of files in this class

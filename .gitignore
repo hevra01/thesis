@@ -36,3 +36,6 @@ __pycache__/
 # ignore all checkpoint folders
 **/checkpoints/
 **/checkpoint/
+
+# ignore dataset related files
+data/datasets/*
