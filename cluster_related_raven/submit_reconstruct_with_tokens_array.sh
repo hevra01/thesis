@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J reconstruct_tokens
-#SBATCH -o logs/out_%A_%a.log
-#SBATCH -e logs/err_%A_%a.log
+#SBATCH -o logs/current.log
+#SBATCH -e logs/current.log
 #SBATCH --time=02:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -16,8 +16,8 @@ source activate /u/hevrapetek/conda-envs/thesis
 
 # --- Configurable variables ---
 EXPERIMENT_NAME=${EXPERIMENT_NAME:-reconstruct_with_tokens}
-BASE_START_CLASS=${BASE_START_CLASS:-800}
-CLASSES_PER_JOB=${CLASSES_PER_JOB:-20}
+BASE_START_CLASS=${BASE_START_CLASS:-19}
+CLASSES_PER_JOB=${CLASSES_PER_JOB:-15}
 
 TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 START_CLASS=$(( BASE_START_CLASS + TASK_ID * CLASSES_PER_JOB ))
