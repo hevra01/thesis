@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH -J reconstruct_tokens
-#SBATCH -o logs/current.log
-#SBATCH -e logs/current.log
-#SBATCH --time=02:00:00
+#SBATCH -o /ptmp/hevrapetek/thesis/logs/current.out
+#SBATCH -e /ptmp/hevrapetek/thesis/logs/current.err
+#SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=64
 #SBATCH --mem=16G
-#SBATCH --array=0-9
 
 # --- Environment setup ---
 module purge
@@ -33,7 +33,7 @@ ARGS=(
   experiment.end_class_idx=$END_CLASS
   experiment.output_path=/ptmp/hevrapetek/reconstruction_imagenet/train
   experiment.register_tokens_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz
-  experiment.data_root=/ptmp/hevrapetek/train
+  experiment.data_root=/ptmp/hevrapetek/ILSVR2012/train
 )
 
 # --- Run ---
