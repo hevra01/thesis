@@ -6,18 +6,21 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=64
+#SBATCH --ntasks-per-core=1
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=16G
 
 # --- Environment setup ---
 module purge
 module load anaconda/3/2023.03
+source ~/.bashrc
 source activate /u/hevrapetek/conda-envs/thesis
+source /ptmp/hevrapetek/thesis/.wandb_secrets.sh
 
 # --- Configurable variables ---
 EXPERIMENT_NAME=${EXPERIMENT_NAME:-reconstruct_with_tokens}
-BASE_START_CLASS=${BASE_START_CLASS:-19}
-CLASSES_PER_JOB=${CLASSES_PER_JOB:-15}
+BASE_START_CLASS=${BASE_START_CLASS:-814}
+CLASSES_PER_JOB=${CLASSES_PER_JOB:-10}
 
 TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 START_CLASS=$(( BASE_START_CLASS + TASK_ID * CLASSES_PER_JOB ))
@@ -37,5 +40,5 @@ ARGS=(
 )
 
 # --- Run ---
-cd ~/thesis
+cd /ptmp/hevrapetek/thesis
 python -u reconstruct_with_tokens.py "${ARGS[@]}"
