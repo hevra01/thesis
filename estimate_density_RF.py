@@ -44,10 +44,6 @@ def main(cfg):
     densities = []
     #divergences = []
 
-
-    # get the output path for saving densities
-    output_path = cfg.experiment.output_path
-
     # read the register tokens from the .npz file
     register_tokens_npz = cfg.experiment.register_path
     data = np.load(register_tokens_npz)
