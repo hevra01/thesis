@@ -3,8 +3,15 @@ defaults:
   - /dataset: imageNet  # Use the ImageNet dataset configuration
 
 
-output_path: "imgnet_densities_RF_0_unconditional_divergences.json"  # Path to save the estimated densities
+output_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagenet_reconstruction_losses_new/imagenet_densities_RF_0_unconditional.json"  # Path to save the estimated densities
 keep_k: 0
 hutchinson_samples: 1  # Number of samples for the Hutchinson estimator
 
-register_path: "all_registers_imagenet.json"
+register_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"
+
+start_batch_idx: 0  # Starting batch index for processing
+end_batch_idx: 10000  # Ending batch index for processing
+
+dataset:
+  root: "/scratch/inf0/user/mparcham/ILSVRC2012/"  # Root directory of the ImageNet dataset
+  batch_size: 4  # Batch size for data loading

@@ -36,7 +36,7 @@ ARGS=(
   experiment.end_class_idx=$END_CLASS
   experiment.output_path=/ptmp/hevrapetek/reconstruction_imagenet/train
   experiment.register_tokens_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz
-  experiment.data_root=/ptmp/hevrapetek/ILSVR2012/train
+  experiment.dataset.root=/scratch/inf0/user/mparcham/ILSVRC2012
 )
 
 # --- Run ---

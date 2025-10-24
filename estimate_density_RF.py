@@ -1,7 +1,14 @@
+"""
+Estimate the density of images using a pre-trained FlexTok rectified flow based decoder model with register tokens.
+"""
+
+
+from itertools import islice
 import json
 import time
 from experiments.image.model.dense_flow import DenseFlow
 import hydra
+import numpy as np
 from omegaconf import OmegaConf
 import torch
 from torchvision.transforms.functional import to_pil_image, to_tensor
@@ -11,39 +18,27 @@ import wandb
 from flextok.utils.misc import detect_bf16_support, get_bf16_context
 
 
-
-def resize_with_box(tensor_batch, size=(64, 64)):
-    resized = []
-    for img in tensor_batch:  # assumes shape [B, 3, H, W]
-        pil_img = to_pil_image(img)  # converts to PIL Image
-        pil_resized = pil_img.resize(size, resample=Image.BOX)
-        tensor_resized = to_tensor(pil_resized)  # back to tensor
-        resized.append(tensor_resized)
-    return torch.stack(resized)
-
-
 @hydra.main(version_base=None, config_path="conf", config_name="estimate_density")
 def main(cfg):
     device = cfg.device
 
     # Initialize W&B and dump Hydra config
     wandb.init(
-        project="dataset_prep", 
+        project="estimate_density_RF", 
         name=f"density_estimation_RF", 
         config=OmegaConf.to_container(cfg, resolve=True)
     )
 
-    
+    # Check start_batch_idx and end_batch_idx 
+    start_batch_idx = cfg.experiment.start_batch_idx
+    end_batch_idx = cfg.experiment.end_batch_idx
+
+    # Format output filename to include batch range
+    base_output_path = cfg.experiment.output_path  
+    output_path = f"{base_output_path}_{start_batch_idx:04d}_{end_batch_idx:04d}.json"
+
     # instantiate the data loader
     dataloader = instantiate(cfg.experiment.dataset)
-
-    # instantiate the density estimator model
-    flextok = instantiate(cfg.experiment.model)
-    flextok.to(device)
-
-
-    enable_bf16 = detect_bf16_support()
-    print('BF16 enabled:', enable_bf16)
 
     # go over the imagenet dataset and estimate the density of the first num_images
     densities = []
@@ -53,34 +48,51 @@ def main(cfg):
     # get the output path for saving densities
     output_path = cfg.experiment.output_path
 
-    register_path = cfg.experiment.register_path
-
-    # Load the register token IDs
-    with open(register_path, "r") as f:
-        all_token_ids = json.load(f)
+    # read the register tokens from the .npz file
+    register_tokens_npz = cfg.experiment.register_path
+    data = np.load(register_tokens_npz)
+    register_tokens = data['token_ids']
 
     batch_size = dataloader.batch_size
 
     # 👈 choose how many registers to keep (user-defined)
     keep_k = cfg.experiment.keep_k  
 
-    flextok.pipeline.count_decoder_params()  # Print decoder parameters 
-
     hutchinson_samples = cfg.experiment.hutchinson_samples 
 
-    
-    for batch_idx, batch in enumerate(dataloader):
+    # since this task is embarassingly parallel, we will use
+    # multiple GPUs to speed up the process, where each GPU will handle 
+    # a specific range of batches.
+    sliced_loader = islice(dataloader, start_batch_idx, end_batch_idx)
+
+    # instantiate the density estimator model
+    flextok = instantiate(cfg.experiment.model).to(device)
+
+    # we only need the gradients w.r.t the inputs for density estimation
+    # not for the weights as well.
+    for p in flextok.parameters():
+        p.requires_grad_(False)
+    flextok.eval()
+
+    enable_bf16 = detect_bf16_support()
+    print('BF16 enabled:', enable_bf16)
+
+    flextok.pipeline.count_decoder_params()  # Print decoder parameters
+
+    for batch_idx, (images, labels) in enumerate(sliced_loader, start=start_batch_idx):
 
         # Convert JSON lists to torch.Tensors and batch them
         token_ids_list = [
-            torch.tensor(register_ids[0][:keep_k]).unsqueeze(0).to(device)
-            for register_ids in all_token_ids[batch_idx * batch_size : (batch_idx + 1) * batch_size]
+            torch.tensor(register_ids[:keep_k]).unsqueeze(0).to(device)
+            for register_ids in register_tokens[batch_idx * batch_size : (batch_idx + 1) * batch_size]
         ]
         start = time.time()
-        imgs = batch[0].to(device)  # get the images without labels
+        
+        # call the density estimation function
         with get_bf16_context(enable_bf16):
-            current_densities = flextok.estimate_log_density(imgs, token_ids_list=token_ids_list, hutchinson_samples=hutchinson_samples)
+            current_densities = flextok.estimate_log_density(images.to(device), token_ids_list=token_ids_list, hutchinson_samples=hutchinson_samples)
         current_densities = [density.item() for density in current_densities]
+        
         #current_divergences = [div.item() for div in no]
         densities.extend(current_densities)
         #divergences.extend(current_divergences)
@@ -88,13 +100,14 @@ def main(cfg):
         # Save the estimated densities to a file
         with open(output_path, "w") as f:
             json.dump(densities, f)
+
+        wandb.log(
+            {
+                "progress/batch_idx": batch_idx + 1,   # current batch
+            },
+            step=batch_idx
+        )
         print(f"Processed batch in {time.time() - start:.2f} seconds.")  
-
-        # Save the estimated divergences to a file
-        # with open(output_path+"_divergences.json", "w") as f:
-        #     json.dump(divergences, f)
-        #     print(f"Processed batch in {time.time() - start:.2f} seconds. Current divergences: {current_divergences}")
-
 
 if __name__ == "__main__":
     main()
