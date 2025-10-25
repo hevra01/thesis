@@ -36,9 +36,9 @@ ARGS=(
   experiment.end_batch_idx=$END_BATCH
   experiment.output_path=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/train/
   experiment.register_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz
-  experiment.root=/ptmp/hevrapetek/ILSVR2012/
+  experiment.dataset.root=/ptmp/hevrapetek/ILSVR2012/
 )
 
 # --- Run ---
 cd /ptmp/hevrapetek/thesis
-python -u estimate_density_RF_copy.py "${ARGS[@]}"
+python -u estimate_density_RF.py "${ARGS[@]}"
