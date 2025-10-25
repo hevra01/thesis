@@ -19,7 +19,7 @@ source /ptmp/hevrapetek/thesis/.wandb_secrets.sh
 
 EXPERIMENT_NAME=${EXPERIMENT_NAME:-estimate_density_RF_0}
 BASE_BATCH=${BASE_START_BATCH:-0}
-BATCHES_PER_JOB=${BATCHES_PER_JOB:-16} # check how many batches can fit into 1D per GPU
+BATCHES_PER_JOB=${BATCHES_PER_JOB:-19000} # check how many batches can fit into 1D per GPU
 
 TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 START_BATCH=$(( BASE_BATCH + TASK_ID * BATCHES_PER_JOB ))
@@ -34,7 +34,7 @@ ARGS=(
   experiment=$EXPERIMENT_NAME
   experiment.start_batch_idx=$START_BATCH
   experiment.end_batch_idx=$END_BATCH
-  experiment.output_path=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/train.json
+  experiment.output_path=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/train/
   experiment.register_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz
   experiment.root=/ptmp/hevrapetek/ILSVR2012/
 )
