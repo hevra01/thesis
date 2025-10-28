@@ -115,7 +115,7 @@ class MAELoss:
         # now reduce across batch (or just return scalar if no batch)
         return per_sample.mean()
 
-def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights=None):
+def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights=None, device='cuda'):
     """
     Computes a weighted sum of reconstruction losses between pred and target.
     
@@ -142,6 +142,8 @@ def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights
     # - Store both values in loss_dict for LPIPS specifically as [scalar, per_layer_list]
     #   to match the requested format.
     for fn, w in zip(loss_fns, loss_weights):
+        reconstructed_img = reconstructed_img.to(device)
+        original_img = original_img.to(device)
         loss_name = fn.__class__.__name__
         is_lpips = loss_name.lower().startswith("lpips")
 
@@ -152,12 +154,12 @@ def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights
             # For LPIPS: keep both [aggregate, per_layer]
             loss_dict[loss_name] = [primary, extras]
         else:
-            result = fn(reconstructed_img, original_img)
-            primary, extras = result, None
-            loss_dict[loss_name] = primary
+            result = fn(reconstructed_img, original_img).flatten(1).mean(dim=1)
+            primary, extras = result.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1), None
+            loss_dict[loss_name] = primary  # keep shape consistent
             
         # Accumulate only the primary value
-        total_loss += w * primary
+        total_loss += primary
     return total_loss, loss_dict
 
 
