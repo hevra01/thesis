@@ -16,10 +16,6 @@ image_normalization:
   mean: [0.485, 0.456, 0.406]
   std: [0.229, 0.224, 0.225]
 
-
-# original image path
-original_data_path: "/ptmp/hevrapetek/ILSVR2012/train"
-
 # reconstruction path
 # "/ptmp/hevrapetek/reconstruction_imagenet/train"
 reconstructed_data_path: "/BS/data_mani_compress/work/thesis/imagenet_reconstructed/train"
