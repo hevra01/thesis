@@ -18,8 +18,8 @@ source activate /u/hevrapetek/conda-envs/thesis
 source /ptmp/hevrapetek/thesis/.wandb_secrets.sh
 
 EXPERIMENT_NAME=${EXPERIMENT_NAME:-estimate_density_RF_0}
-BASE_BATCH=${BASE_START_BATCH:-320291}
-BATCHES_PER_JOB=${BATCHES_PER_JOB:-1} # check how many batches can fit into 1D per GPU
+BASE_BATCH=${BASE_START_BATCH:-12666}
+BATCHES_PER_JOB=${BATCHES_PER_JOB:-6334} # check how many batches can fit into 1D per GPU
 
 TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 START_BATCH=$(( BASE_BATCH + TASK_ID * BATCHES_PER_JOB ))
@@ -37,7 +37,7 @@ ARGS=(
   experiment.output_path=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/train/
   experiment.register_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz
   experiment.dataset.root=/ptmp/hevrapetek/ILSVR2012/
-  experiment.dataset.batch_size=4
+  experiment.dataset.batch_size=12
 )
 
 # --- Run ---
