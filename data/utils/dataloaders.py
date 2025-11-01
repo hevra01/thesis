@@ -99,7 +99,7 @@ def get_imagenet_dataloader(
     split="val",  # or "train"
     batch_size=64,
     class_filter=None,
-    num_workers=32,
+    num_workers=16,
     shuffle=False,
     transform_profile: str = "imagenet",
     transform=None,

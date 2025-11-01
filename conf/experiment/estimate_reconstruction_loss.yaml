@@ -27,6 +27,6 @@ reconstruction_loss_output_path: /BS/data_mani_compress/work/thesis/thesis/data/
 
 device: "cuda"
 
-k_keep_list: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+k_keep_list: [8, 16, 32, 64, 128, 256]
 
 register_token_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"
