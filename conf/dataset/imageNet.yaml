@@ -5,7 +5,7 @@ _target_: data.utils.dataloaders.get_imagenet_dataloader
 # Arguments for the ImageNet dataloader
 root: /scratch/inf0/user/mparcham/ILSVRC2012  # Path to the ImageNet dataset
 split: train  # Dataset split, can be "train" or "val"
-batch_size: 32  # Batch size for loading data
+batch_size: 64  # Batch size for loading data
 transform_profile: imagenet  # one of: [imagenet, clip, sd_vae]
 class_filter: null  # Optional list of class IDs to filter (null means no filtering)
 num_workers: 64  # Number of workers for data loading

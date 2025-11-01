@@ -56,7 +56,7 @@ ARGS=(
   experiment.end_class_idx=$END_CLASS
   experiment.output_path=anvme/workspace/v114be16-hevra/reconstruction_imagenet/train
   experiment.register_tokens_path=anvme/workspace/v114be16-hevra/imagenet_register_tokens/imagnet_train_register_tokens.npz
-  experiment.data_root=anvme/workspace/v114be16-hevra/thesis/ILSVRC2012/train
+  experiment.root=anvme/workspace/v114be16-hevra/thesis/ILSVRC2012/train
 )
 
 python -u reconstruct_with_tokens.py "${ARGS[@]}"

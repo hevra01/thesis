@@ -14,6 +14,12 @@ from omegaconf import OmegaConf
 from hydra.utils import instantiate
 
 
+"""
+Similar to find_reconstruction_loss.py, this files tokenizes images from ImageNet using FlexTok,
+reconstructs them using different number of tokens, and computes reconstruction errors.
+However, in find_reconstruction_loss.py, we assume that the files which are reconstructed already exist
+so we only compute the loss but here we also tokenize and reconstruct them on the fly.
+"""
 
 @hydra.main(version_base=None, config_path="conf", config_name="prep_dataset_compression_reconstruction")
 def main(cfg):

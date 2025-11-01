@@ -54,17 +54,13 @@ def main(cfg):
         # Count files (non-recursive) in a class directory
         return sum(1 for f in os.listdir(cls_dir) if os.path.isfile(os.path.join(cls_dir, f)))
 
-    global_offset = 0
-    for i in range(start_class_idx, 0, -1):
-        # Walk backwards to reduce string concatenations? Not necessary; keep simple forward loop instead.
-        pass
     # Simple forward accumulation
     global_offset = 0
     for i in range(0, start_class_idx):
         cls_dir = os.path.join(data_root, wnids[i])
         global_offset += _count_files(cls_dir)
 
-    N_tokens = token_ids.shape[0]
+    N_tokens = token_ids.shape[0] # in token_ids, we store the 256 tokens for N images (which is the whole imagenet)
 
     enable_bf16 = detect_bf16_support()
     print("BF16 enabled:", enable_bf16)
@@ -93,7 +89,7 @@ def main(cfg):
     # 3) Iterate over selected classes and reconstruct/save their images in mini-batches.
     current_global = global_offset  # running global index into token_ids
     for ci in range(start_class_idx, end_class_idx):
-        wnid = wnids[ci]
+        wnid = wnids[ci] # get the particular class WNID
         cls_dir = os.path.join(data_root, wnid)
 
         # Files for this class (alphabetically sorted), used to derive original filenames
@@ -117,6 +113,9 @@ def main(cfg):
                 tokens_list_filtered = []
                 out_paths = []
 
+                out_dir = os.path.join(base_out, f"reconst_{k_keep}", wnid)
+                os.makedirs(out_dir, exist_ok=True)
+
                 # Build tokens for this mini-batch and the corresponding output paths
                 for li, gi in zip(local_idxs, global_idxs):
                     ids_np = token_ids[gi, :k_keep]
@@ -124,8 +123,7 @@ def main(cfg):
                     tokens_list_filtered.append(ids_t)
 
                     basename = names[li]
-                    out_dir = os.path.join(base_out, f"reconst_{k_keep}", wnid)
-                    os.makedirs(out_dir, exist_ok=True)
+                    
                     out_paths.append(os.path.join(out_dir, basename))
 
                 # Detokenize and save this mini-batch

@@ -32,7 +32,7 @@ from reconstruction_loss import reconstruction_error
 from data.utils.dataloaders import get_imagenet_dataloader
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="experiment/estimate_reconstruction_loss")
+@hydra.main(version_base=None, config_path="conf", config_name="estimate_reconstruction_loss")
 def main(cfg: DictConfig):
     # Initialize W&B and dump Hydra config
     wandb.init(
@@ -79,6 +79,7 @@ def main(cfg: DictConfig):
         # For reconstructed images, we get from reconstructed_dataloader. 
         # use the dataloader to get img. ignore the labels
         for batch_idx, (original_batch, reconstructed_batch) in enumerate(zip(original_images_dataloader, reconstructed_dataloader)):
+            
             original_imgs = original_batch[0].to(device)  # get the images without labels
             reconst_imgs = reconstructed_batch[0].to(device)
 
@@ -89,7 +90,7 @@ def main(cfg: DictConfig):
             # Compute reconstruction errors
             with torch.no_grad():
                 total_loss, loss_dict = reconstruction_error(
-                    original_imgs, reconst_imgs, loss_fns=loss_fns, device=device
+                    reconst_imgs, original_imgs, loss_fns=loss_fns, device=device
                 )
             # Store errors for each image in the batch
             for img_idx in range(original_imgs.size(0)):

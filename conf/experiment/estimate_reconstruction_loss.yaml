@@ -1,6 +1,8 @@
 defaults:
-  - ../dataset: imageNet
+  - /dataset: imageNet
 
+dataset:
+  batch_size: 64  # Override batch size for this experiment
 
 # Loss functions to compute between reconstruction and ground-truth
 loss_functions:

@@ -14,4 +14,4 @@ end_batch_idx: 10000  # Ending batch index for processing
 
 dataset:
   root: "/scratch/inf0/user/mparcham/ILSVRC2012/"  # Root directory of the ImageNet dataset
-  batch_size: 4  # Batch size for data loading
+  batch_size: 8  # Batch size for data loading
