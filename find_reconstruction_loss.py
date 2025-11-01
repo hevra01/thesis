@@ -48,7 +48,8 @@ def main(cfg: DictConfig):
 
     # instantiate original dataset
     original_images_dataloader = instantiate(cfg.experiment.dataset)
-
+    print(cfg.experiment.dataset)
+    print(len(original_images_dataloader))
     # Where reconstructed images live
     reconstructed_data_path = cfg.experiment.reconstructed_data_path
 

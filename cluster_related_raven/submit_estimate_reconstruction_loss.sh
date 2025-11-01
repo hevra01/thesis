@@ -23,7 +23,8 @@ cd /ptmp/hevrapetek/thesis
 ARGS=(
   experiment.reconstructed_data_path=/ptmp/hevrapetek/reconstruction_imagenet/train
   experiment.reconstruction_loss_output_path=/ptmp/hevrapetek/thesis/data/datasets/imagenet_reconstruction_losses_new/all.json
-  experiment.register_token_path= "/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"
+  experiment.register_token_path="/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"
+  experiment.dataset.root="/ptmp/hevrapetek/ILSVR2012"
 )
 
-python find_reconstruction_loss.py
+python find_reconstruction_loss.py "${ARGS[@]}"

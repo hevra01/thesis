@@ -18,8 +18,8 @@ source activate /u/hevrapetek/conda-envs/thesis
 source /ptmp/hevrapetek/thesis/.wandb_secrets.sh
 
 EXPERIMENT_NAME=${EXPERIMENT_NAME:-estimate_density_RF_0}
-BASE_BATCH=${BASE_START_BATCH:-12666}
-BATCHES_PER_JOB=${BATCHES_PER_JOB:-6334} # check how many batches can fit into 1D per GPU
+BASE_BATCH=${BASE_START_BATCH:-0}
+BATCHES_PER_JOB=${BATCHES_PER_JOB:-4850} # check how many batches can fit into 1D per GPU
 
 TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 START_BATCH=$(( BASE_BATCH + TASK_ID * BATCHES_PER_JOB ))
