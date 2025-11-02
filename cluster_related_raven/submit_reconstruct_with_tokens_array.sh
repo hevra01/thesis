@@ -19,8 +19,8 @@ source /ptmp/hevrapetek/thesis/.wandb_secrets.sh
 
 # --- Configurable variables ---
 EXPERIMENT_NAME=${EXPERIMENT_NAME:-reconstruct_with_tokens}
-BASE_START_CLASS=${BASE_START_CLASS:-684}
-CLASSES_PER_JOB=${CLASSES_PER_JOB:-1}
+BASE_START_CLASS=${BASE_START_CLASS:-0}
+CLASSES_PER_JOB=${CLASSES_PER_JOB:-40}
 
 TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 START_CLASS=$(( BASE_START_CLASS + TASK_ID * CLASSES_PER_JOB ))
@@ -34,9 +34,9 @@ ARGS=(
   experiment=$EXPERIMENT_NAME
   experiment.start_class_idx=$START_CLASS
   experiment.end_class_idx=$END_CLASS
-  experiment.output_path=/ptmp/hevrapetek/reconstruction_imagenet/train
-  experiment.register_tokens_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz
-  experiment.data_root=/ptmp/hevrapetek/ILSVR2012/train
+  experiment.output_path=/ptmp/hevrapetek/reconstruction_imagenet/val
+  experiment.register_tokens_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz
+  experiment.data_root=/ptmp/hevrapetek/ILSVR2012/val
 )
 
 # --- Run ---
