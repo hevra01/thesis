@@ -47,6 +47,7 @@ def main(cfg):
     # choose how many registers to keep (user-defined)
     keep_k = cfg.experiment.keep_k
     hutchinson_samples = cfg.experiment.hutchinson_samples
+    conditional = cfg.experiment.conditional
 
     # slice the loader by batch indices (end is exclusive)
     sliced_loader = islice(dataloader, start_batch_idx, end_batch_idx)
@@ -87,7 +88,8 @@ def main(cfg):
             current_densities = flextok.estimate_log_density(
                 images.to(device),
                 token_ids_list=token_ids_list,
-                hutchinson_samples=hutchinson_samples
+                hutchinson_samples=hutchinson_samples,
+                conditional=conditional
             )
         current_densities = [d.item() for d in current_densities]
         densities.extend(current_densities)

@@ -4,7 +4,8 @@ defaults:
 
 
 output_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagenet_reconstruction_losses_new/imagenet_densities_RF_0_unconditional.json"  # Path to save the estimated densities
-keep_k: 0
+conditional: true  # Whether to perform conditional density estimation
+keep_k: 1
 hutchinson_samples: 1  # Number of samples for the Hutchinson estimator
 
 register_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"
