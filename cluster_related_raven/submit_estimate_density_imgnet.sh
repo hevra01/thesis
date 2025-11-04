@@ -2,7 +2,7 @@
 #SBATCH -J reconstruct_tokens
 #SBATCH -o /ptmp/hevrapetek/thesis/logs/current.out
 #SBATCH -e /ptmp/hevrapetek/thesis/logs/current.err
-#SBATCH --time=1-00:00:00
+#SBATCH --time=0-08:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -34,7 +34,7 @@ ARGS=(
   experiment=$EXPERIMENT_NAME
   experiment.start_batch_idx=$START_BATCH
   experiment.end_batch_idx=$END_BATCH
-  experiment.output_path=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/train/
+  experiment.output_path=/ptmp/hevrapetek/thesis/data/datasets/densities_new_imagenet/train_conditional/token_count_1/
   experiment.register_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz
   experiment.dataset.root=/ptmp/hevrapetek/ILSVR2012/
   experiment.dataset.batch_size=12
