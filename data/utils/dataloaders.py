@@ -316,7 +316,7 @@ class ReconstructionDataset_Heuristic(Dataset):
                  filter_key: str | None = None,
                  min_error: float | None = None,
                  max_error: float | None = None,
-                 error_key: str = "vgg_error",):
+                 error_key: list[str] = ["vgg_error"]):
         """
         Args:
             reconstruction_data (list): List of dicts containing reconstruction metrics.
@@ -377,11 +377,11 @@ class ReconstructionDataset_Heuristic(Dataset):
         """
         data_point = self.reconstruction_data[idx]
         k_value = data_point["k_value"]
-        err_val = data_point[self.error_key]
+        err_vals = {key: data_point[key] for key in self.error_key}
         image_id = data_point["image_id"]
 
         out = {
-            self.error_key: err_val,
+            **err_vals,
             "k_value": k_value,
             "image_id": image_id,
         }
