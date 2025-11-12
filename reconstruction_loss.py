@@ -5,6 +5,7 @@ import torchvision.transforms.functional as TF
 import torch.nn.functional as F
 from typing import Optional
 import lpips
+from transformers import AutoModel, AutoImageProcessor
 
 
 class VGGPerceptualLoss(nn.Module):
@@ -85,6 +86,160 @@ class VGGPerceptualLoss(nn.Module):
             #loss += nn.functional.l1_loss(feats_x[k], feats_y[k])
         return loss
     
+
+class DINOv2FeatureLoss(nn.Module):
+    """
+    DINOv2FeatureLoss
+    ------------------
+    Computes a feature-based (semantic) loss between two batches of images
+    using pretrained DINOv2 embeddings.
+
+    This loss captures *semantic* similarity — i.e., how similar the images
+    are in DINOv2's learned feature space — rather than just pixel-level
+    similarity.
+
+    The model uses cosine similarity (recommended) or optionally L1/MSE.
+    """
+
+    def __init__(self,
+                 dinov2_dir: str,          # local directory with the DINOv2 weights
+                 use_pooler=True,          # if True, use pooler_output (CLS after projection)
+                 normalize=True,           # whether to L2-normalize embeddings
+                 loss_type="cosine",       # 'cosine', 'mse', or 'l1'
+                 device=None):             # GPU/CPU selection
+        super().__init__()
+
+        # ---------------------------------------------------------------------
+        # 1) Load pretrained model and preprocessor from local folder
+        # ---------------------------------------------------------------------
+        # AutoImageProcessor: handles preprocessing (resize, crop, normalize)
+        # AutoModel: loads the transformer backbone itself (ViT trained with DINOv2)
+        self.processor = AutoImageProcessor.from_pretrained(
+            dinov2_dir, local_files_only=True
+        )
+        self.model = AutoModel.from_pretrained(
+            dinov2_dir, local_files_only=True
+        )
+
+        # Set model to evaluation mode (important: disables dropout, etc.)
+        self.model.eval()
+
+        # Freeze all parameters (no gradient updates)
+        for p in self.model.parameters():
+            p.requires_grad = False
+
+        # Store settings
+        self.normalize = normalize
+        self.loss_type = loss_type
+        self.use_pooler = use_pooler
+
+        # Pick the compute device
+        # If no device was passed, prefer GPU if available
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Move model to chosen device
+        self.model.to(self.device)
+
+    # -------------------------------------------------------------------------
+    # 2) Embedding extractor
+    # -------------------------------------------------------------------------
+    def _embed(self, x01):
+        """
+        Computes DINOv2 embeddings for a batch of images.
+
+        Args:
+            x01 : torch.Tensor [B, 3, H, W]
+                RGB images in [0, 1] range.
+
+        Returns:
+            emb : torch.Tensor [B, D]
+                Feature embeddings for each image (D=768 for DINOv2-Base).
+        """
+
+        # The DINOv2 processor expects a *list* of images (not a single batch tensor)
+        # Each image can be a tensor, numpy array, or PIL Image.
+        # 'do_rescale=False' -> we already have values in [0,1], not [0,255].
+        inputs = self.processor(
+            images=[t for t in x01],   # convert batch tensor -> list of images
+            return_tensors="pt",       # output PyTorch tensors
+            do_rescale=False           # skip scaling 0–255 → 0–1
+        )
+
+        # Move the resulting tensors to GPU/CPU
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+        # Disable gradient computation (faster + no memory overhead)
+        with torch.no_grad():
+            # Forward pass through DINOv2 model
+            # Output is a dict-like object with keys such as:
+            #   'last_hidden_state': [B, num_tokens, D]
+            #   'pooler_output'    : [B, D] (optional projection of CLS token)
+            out = self.model(**inputs)
+
+        # ---------------------------------------------------------------------
+        # Extract embeddings
+        # ---------------------------------------------------------------------
+        # DINOv2 outputs two useful representations:
+        #   - out.last_hidden_state[:, 0]  -> CLS token (global feature)
+        #   - out.pooler_output             -> projected CLS (after linear+tanh)
+        # The pooler output is typically more stable for similarity comparisons.
+        emb = (
+            out.pooler_output
+            if self.use_pooler and getattr(out, "pooler_output", None) is not None
+            else out.last_hidden_state[:, 0]
+        )
+
+        # Optional: L2-normalize embeddings so that each vector has unit length.
+        # This makes comparisons focus purely on direction (semantic content)
+        # instead of magnitude (feature scale).
+        if self.normalize:
+            emb = F.normalize(emb, p=2, dim=1)
+
+        # Shape: [B, D]
+        return emb
+
+    # -------------------------------------------------------------------------
+    # 3) Forward: compute the loss between two image batches
+    # -------------------------------------------------------------------------
+    def forward(self, x01, y01):
+        """
+        Compute DINOv2 feature loss between two batches of images.
+
+        Args:
+            x01 : torch.Tensor [B, 3, H, W]
+                First batch (e.g., original images) in [0,1].
+            y01 : torch.Tensor [B, 3, H, W]
+                Second batch (e.g., reconstructed images) in [0,1].
+
+        Returns:
+            loss : torch.ScalarTensor
+                Feature-space distance between x and y.
+        """
+
+        # Extract embeddings for both sets of images
+        fx = self._embed(x01)
+        fy = self._embed(y01)
+
+        # ---------------------------------------------------------------------
+        # Choose loss type
+        # ---------------------------------------------------------------------
+
+        # 1️⃣ Mean Squared Error — penalizes both direction and magnitude differences.
+        #    Use if you're doing *feature regression* (not just semantic similarity).
+        if self.loss_type == "mse":
+            return F.mse_loss(fx, fy)
+
+        # 2️⃣ L1 (Mean Absolute Error) — less sensitive to outliers.
+        #    Also includes magnitude information.
+        if self.loss_type == "l1":
+            return F.l1_loss(fx, fy)
+
+        # 3️⃣ Cosine distance — focuses only on *directional similarity* of features.
+        #    This is the correct choice for semantic similarity (DINO embeddings
+        #    were trained on normalized features, so scale has no meaning).
+        #    The output is in [0, 2] range (0 = identical, 1 = orthogonal).
+        return (1 - F.cosine_similarity(fx, fy, dim=1))
+
     
 class MSELoss:
     def __call__(self, input, target):
@@ -162,61 +317,6 @@ def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights
         total_loss += primary
     return total_loss, loss_dict
 
-
-def reconstructionLoss_vs_compressionRate(model, images, k_keep_list, loss_fns, device, loss_weights=None):
-    """
-    Computes reconstruction losses for different compression rates.
-    
-    Args:
-        model: FlexTok model instance.
-        images: Tensor of shape (B, 3, H, W) with input images.
-        k_keep_list: List of integers representing the number of tokens to keep.
-        loss_fns: List of loss functions to compute.
-        loss_weights: List of weights for each loss function.
-
-    Returns:
-        dict: Dictionary with compression rates as keys and total losses as values.
-    """
-    results = {}
-
-    # First tokenize the images into register tokens, which already handles the VAE mapping to latents.
-    tokens_list = model.tokenize(images.to(device))
-
-    # ImageNet normalization constants
-    imagenet_mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(device)
-    imagenet_std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(device)
-
-    # Unnormalize the original input images and scale to [0, 1]
-    images_unnorm = images * imagenet_std + imagenet_mean  # [0, 1]
-    
-
-    # we want to see how the reconstruction error changes with different compression rates.
-    # lower k_keep means (fewer registers) more compression, higher k_keep means less compression.
-    for k_keep in k_keep_list:
-        # the first ":" means for all images in the batch, the second refers to the register tokens.
-        # we keep only the first k_keep tokens.
-        tokens_list_filtered = [t[:,:k_keep] for t in tokens_list]
-        
-        reconst = model.detokenize(
-            tokens_list_filtered,
-            timesteps=20,
-            guidance_scale=7.5,
-            perform_norm_guidance=True,
-        )
-
-    
-        # Convert reconstructed image from [-1, 1] to [0, 1]
-        reconst_scaled = (reconst.clamp(-1, 1) + 1) / 2  # --> [0, 1]
-
-        total_loss, loss_dict = reconstruction_error(reconst_scaled, images_unnorm, 
-            loss_fns=loss_fns,
-            loss_weights=loss_weights
-        )
-        print(f"Compression rate k_keep={k_keep}: Total Loss = {loss_dict.values()}")
-        
-        results[k_keep] = [loss_dict, reconst]
-    
-    return results
 
 
 class GaussianCrossEntropyLoss(nn.Module):

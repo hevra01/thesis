@@ -5,7 +5,7 @@ defaults:
 
 optimizer:
   _target_: torch.optim.Adam
-  lr: 0.0001
+  lr: 0.001
 
 training:
     num_epochs: 500
@@ -16,10 +16,10 @@ training:
 # this is for the main dataset that has the mse_errors, vgg_errors for all the images for different
 # values of k_values and the  bpp.
 reconstruction_dataset:
-  reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
-  batch_size: 120 # this is the batch size for the reconstruction dataset
+  reconstruction_data_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagenet_reconstruction_losses_new/all_reconstruction_losses.json"
+  batch_size: 180 # this is the batch size for the reconstruction dataset on A40, 4 GPU, 180 batch size is possible
   shuffle: true
-  reconstruction_loss: "vgg_error"  # e.g., "mse_error" or "vgg_error"
+  reconstruction_loss: "LPIPS"  # e.g., "mse_error" or "vgg_error"
   # Optional: filter samples by an error range to simplify training.
   # Set 'key' to the metric to filter on (e.g., 'vgg_error' or 'mse_error').
   # Set 'min'/'max' to numeric bounds (inclusive). Leave as null to disable.
@@ -28,7 +28,7 @@ reconstruction_dataset:
   #   min: 2.83040   # e.g., 0.30
   #   max: 2.83640   # e.g., 0.35
 
-checkpoint_path: "neural_baseline/checkpoint/adaln_vgg_16_small.pt"
+checkpoint_path: "neural_baseline/checkpoint/adaln_vgg_7166_small.pt"
 
 
 # different experiments might use different splits of the data
@@ -36,4 +36,4 @@ dataset:
   split: "train"
   transform_profile: "sd_vae"  # 224 when using clip, 256 when using resnet
 
-experiment_name: "regression_neural_baseline_Adaln_vgg_16_small"
+experiment_name: "regression_neural_baseline_Adaln_all_with_new_loss_many_resource"
