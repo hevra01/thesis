@@ -17,7 +17,7 @@ source ~/.bashrc
 source activate /u/hevrapetek/conda-envs/thesis
 source /ptmp/hevrapetek/thesis/.wandb_secrets.sh
 
-EXPERIMENT_NAME=${EXPERIMENT_NAME:-estimate_density_RF_0}
+EXPERIMENT_NAME=${EXPERIMENT_NAME:-estimate_density_RF_0_2}
 BASE_BATCH=${BASE_START_BATCH:-0}
 BATCHES_PER_JOB=${BATCHES_PER_JOB:-200} # check how many batches can fit into 1D per GPU
 
@@ -34,12 +34,12 @@ ARGS=(
   experiment=$EXPERIMENT_NAME
   experiment.start_batch_idx=$START_BATCH
   experiment.end_batch_idx=$END_BATCH
-  experiment.output_path=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet_val/hutchinson_4/token_count_0/
-  experiment.keep_k=0
+  experiment.output_path=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet_val/hutchinson_4/token_count_1/
+  experiment.keep_k=1
   experiment.register_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz
   experiment.dataset.root=/ptmp/hevrapetek/ILSVR2012/
-  experiment.dataset.batch_size=12
   experiment.dataset.split="val_categorized"
+  experiment.dataset.batch_size=12
 )
 
 # --- Run ---

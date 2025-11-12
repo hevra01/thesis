@@ -2,7 +2,7 @@
 #SBATCH -J reconstruct_tokens
 #SBATCH -o /ptmp/hevrapetek/thesis/logs/current.out
 #SBATCH -e /ptmp/hevrapetek/thesis/logs/current.err
-#SBATCH --time=1-00:00:00
+#SBATCH --time=0-10:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -22,10 +22,11 @@ cd /ptmp/hevrapetek/thesis
 # --- Arguments for Python script ---
 ARGS=(
   experiment=${EXPERIMENT_NAME:-estimate_reconstruction_loss}
-  experiment.reconstructed_data_path=/ptmp/hevrapetek/reconstruction_imagenet/train
-  experiment.reconstruction_loss_output_path=/ptmp/hevrapetek/thesis/data/datasets/imagenet_reconstruction_losses_new/all_2.json
-  experiment.register_token_path="/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"
+  experiment.reconstructed_data_path=/ptmp/hevrapetek/reconstruction_imagenet/val
+  experiment.reconstruction_loss_output_path=/ptmp/hevrapetek/thesis/data/datasets/imagenet_reconstruction_losses/val/all.json
+  experiment.register_token_path="/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz"
   experiment.dataset.root="/ptmp/hevrapetek/ILSVR2012"
+  experiment.dataset.split="val"
 )
 
 python find_reconstruction_loss.py "${ARGS[@]}"

@@ -20,7 +20,7 @@ def main(cfg):
     # Initialize W&B and dump Hydra config
     wandb.init(
         project="estimate_density_RF",
-        name=f"density_estimation_RF",
+        name=f"density_estimation_RF_conditional",
         config=OmegaConf.to_container(cfg, resolve=True)
     )
 
