@@ -308,6 +308,9 @@ def reconstruction_error(reconstructed_img, original_img, loss_fns, loss_weights
             primary, extras = result[0], result[1]
             # For LPIPS: keep both [aggregate, per_layer]
             loss_dict[loss_name] = [primary, extras]
+        elif loss_name == "DINOv2FeatureLoss":
+            result = fn(reconstructed_img, original_img)
+            loss_dict[loss_name] = result  # keep shape consistent
         else:
             result = fn(reconstructed_img, original_img).flatten(1).mean(dim=1)
             primary, extras = result.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1), None

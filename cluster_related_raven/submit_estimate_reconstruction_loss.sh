@@ -26,7 +26,7 @@ ARGS=(
   experiment.reconstruction_loss_output_path=/ptmp/hevrapetek/thesis/data/datasets/imagenet_reconstruction_losses/val/all.json
   experiment.register_token_path="/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz"
   experiment.dataset.root="/ptmp/hevrapetek/ILSVR2012"
-  experiment.dataset.split="val"
+  experiment.dataset.split="val_categorized"
 )
 
 python find_reconstruction_loss.py "${ARGS[@]}"

@@ -98,7 +98,8 @@ def main(cfg: DictConfig):
                     "k_value": k_keep,
                     "L1Loss": loss_dict["L1Loss"][img_idx].item(),
                     "LPIPS": loss_dict["LPIPS"][0][img_idx].item(),
-                    "LPIPS_layers": [t[img_idx].item() for t in loss_dict["LPIPS"][1]]
+                    "LPIPS_layers": [t[img_idx].item() for t in loss_dict["LPIPS"][1]],
+                    "DINOv2FeatureLoss": loss_dict["DINOv2FeatureLoss"][img_idx].item()
                 })
             print(f"Processed batch {batch_idx} for k={k_keep}")
             

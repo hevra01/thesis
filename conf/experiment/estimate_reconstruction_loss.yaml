@@ -11,6 +11,13 @@ loss_functions:
   - _target_: lpips.LPIPS
     net: vgg
 
+  - _target_: reconstruction_loss.DINOv2FeatureLoss 
+    # /ptmp/hevrapetek/thesis/models/weights/dinov2-base
+    dinov2_dir: /ptmp/hevrapetek/thesis/models/weights/dinov2-base
+    use_pooler: true
+    normalize: true
+    loss_type: cosine
+
 
 image_normalization:
   mean: [0.485, 0.456, 0.406]
@@ -18,15 +25,16 @@ image_normalization:
 
 # reconstruction path
 # "/ptmp/hevrapetek/reconstruction_imagenet/train"
+
 reconstructed_data_path: "/BS/data_mani_compress/work/thesis/imagenet_reconstructed/train"
 reconstruction_data_path_split: "train"
  
 # path to store the reconstruction losses
 # "/ptmp/hevrapetek/thesis/data/datasets/imagenet_register_tokens/imagnet_train_register_tokens"
-reconstruction_loss_output_path: /BS/data_mani_compress/work/thesis/thesis/data/datasets/imagenet_reconstruction_losses_new/all.json
+reconstruction_loss_output_path: /BS/data_mani_compress/work/thesis/thesis/data/datasets/imagenet_reconstruction_losses/train_with_dino/all.json
 
 device: "cuda"
 
-k_keep_list: [8, 16, 32, 64, 128, 256]
+k_keep_list: [1, 2, 4, 8, 16, 32, 64, 128, 256]
 
 register_token_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"

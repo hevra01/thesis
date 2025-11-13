@@ -39,3 +39,5 @@ __pycache__/
 
 # ignore dataset related files
 data/datasets/*
+
+models/weights/*
