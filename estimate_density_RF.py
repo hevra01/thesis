@@ -85,13 +85,15 @@ def main(cfg):
 
         start_t = time.time()
         with get_bf16_context(enable_bf16):
-            current_densities = flextok.estimate_log_density(
+            integral_part, source_part = flextok.estimate_log_density(
                 images.to(device),
                 token_ids_list=token_ids_list,
                 hutchinson_samples=hutchinson_samples,
                 conditional=conditional
             )
-        current_densities = [d.item() for d in current_densities]
+        current_integral = [d.item() for d in integral_part]
+        current_source = [d.item() for d in source_part]
+        current_densities = [[i,  s] for i, s in zip(current_integral, current_source)]
         densities.extend(current_densities)
 
         # Save incrementally
