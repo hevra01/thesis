@@ -27,6 +27,7 @@ ARGS=(
   experiment.register_token_path="/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz"
   experiment.dataset.root="/ptmp/hevrapetek/ILSVR2012"
   experiment.dataset.split="val_categorized"
+  experiment.k_keep_list=[1, 2, 3]
 )
 
 python find_reconstruction_loss.py "${ARGS[@]}"
