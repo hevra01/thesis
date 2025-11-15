@@ -11,7 +11,7 @@ import torch
 from hydra.utils import instantiate
 import wandb
 from flextok.utils.misc import detect_bf16_support, get_bf16_context
-
+import os
 
 @hydra.main(version_base=None, config_path="conf", config_name="estimate_density")
 def main(cfg):
@@ -31,6 +31,9 @@ def main(cfg):
     # Format output filename to include batch range
     base_output_path = cfg.experiment.output_path
     output_path = f"{base_output_path}_{start_batch_idx:04d}_{end_batch_idx:04d}.json"
+
+    # make sure output path directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # instantiate the data loader
     dataloader = instantiate(cfg.experiment.dataset)
