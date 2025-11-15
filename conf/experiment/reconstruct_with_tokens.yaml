@@ -21,3 +21,6 @@ data_root: "/scratch/inf0/user/mparcham/ILSVRC2012/train"
 
 # Batch size for detokenize calls and slicing math
 batch_size: 90
+
+# APC on or off
+perform_apc: true

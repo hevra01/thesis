@@ -67,6 +67,9 @@ def main(cfg):
 
     flextok.pipeline.count_decoder_params()
 
+    # get the guidance scale 
+    guidance_scale = cfg.experiment.guidance_scale
+
     # get the timesteps for density estimation
     timesteps = cfg.experiment.timesteps
 
@@ -96,7 +99,8 @@ def main(cfg):
                 token_ids_list=token_ids_list,
                 hutchinson_samples=hutchinson_samples,
                 conditional=conditional,
-                timesteps=timesteps
+                timesteps=timesteps,
+                guidance_scale=guidance_scale
             )
         current_integral = [d.item() for d in integral_part]
         current_source = [d.item() for d in source_part]

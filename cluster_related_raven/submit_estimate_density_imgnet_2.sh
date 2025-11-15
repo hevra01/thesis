@@ -52,6 +52,7 @@ ARGS=(
   experiment.output_path=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet_val/analysis_cfg/token_count_${KEEP_K}/
   experiment.keep_k=${KEEP_K}
   experiment.timesteps=50
+  experiment.guidance_scale=1.0
   experiment.register_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz
   experiment.dataset.root=/ptmp/hevrapetek/ILSVR2012/
   experiment.dataset.split="val_categorized"

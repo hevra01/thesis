@@ -24,6 +24,10 @@ def main(cfg):
     # Config (paths and parameters coming from Hydra config)
     k_keep_list = cfg.experiment.k_keep_list                 # e.g., [1,2,4,...,256]
     base_out = cfg.experiment.output_path                    # parent output dir
+
+    # create output directory if it does not exist
+    os.makedirs(base_out, exist_ok=True)
+
     data_root = cfg.experiment.data_root                     # ImageNet train root with 1000 WNID subfolders
     batch_size = int(cfg.experiment.get("batch_size", 64))  # decode batch size
     start_class_idx = int(cfg.experiment.get("start_class_idx", 0))  # inclusive
@@ -31,6 +35,9 @@ def main(cfg):
     # Defaults requested
     timesteps = 20
     guidance_scale = 7.5
+
+    # APC on or off
+    perform_apc = cfg.experiment.get("perform_apc", True)
 
     # Tokens
     tokens_path = cfg.experiment.register_tokens_path
@@ -132,6 +139,7 @@ def main(cfg):
                         tokens_list_filtered,
                         timesteps=timesteps,
                         guidance_scale=guidance_scale, verbose=False,
+                        perform_norm_guidance=perform_apc,
                     )  # [-1,1]
                 for img_t, out_path in zip(reconstructed, out_paths):
                     save_image(((img_t.clamp(-1, 1) + 1) / 2), out_path)

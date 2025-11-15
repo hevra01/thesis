@@ -37,6 +37,7 @@ ARGS=(
   experiment.output_path=/ptmp/hevrapetek/reconstruction_imagenet/val
   experiment.register_tokens_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz
   experiment.data_root=/ptmp/hevrapetek/ILSVR2012/val
+  experiment.perform_apc=true
 )
 
 # --- Run ---
