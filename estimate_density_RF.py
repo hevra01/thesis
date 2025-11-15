@@ -64,6 +64,9 @@ def main(cfg):
 
     flextok.pipeline.count_decoder_params()
 
+    # get the timesteps for density estimation
+    timesteps = cfg.experiment.timesteps
+
     for batch_idx, (images, labels) in enumerate(sliced_loader, start=start_batch_idx):
         # ---- FIX: make token slicing match the actual batch length ----
         # number of samples in THIS batch (handles short last batch)
@@ -89,7 +92,8 @@ def main(cfg):
                 images.to(device),
                 token_ids_list=token_ids_list,
                 hutchinson_samples=hutchinson_samples,
-                conditional=conditional
+                conditional=conditional,
+                timesteps=timesteps
             )
         current_integral = [d.item() for d in integral_part]
         current_source = [d.item() for d in source_part]

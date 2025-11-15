@@ -55,6 +55,9 @@ def main(cfg: DictConfig):
     # Output directory for metrics
     output_path = cfg.experiment.reconstruction_loss_output_path
 
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
     # Load normalization values from Hydra config
     mean = torch.tensor(cfg.experiment.image_normalization.mean).view(1, 3, 1, 1).to(device)
     std = torch.tensor(cfg.experiment.image_normalization.std).view(1, 3, 1, 1).to(device)

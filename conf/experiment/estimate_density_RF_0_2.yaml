@@ -13,6 +13,8 @@ register_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagnet_
 start_batch_idx: 0  # Starting batch index for processing
 end_batch_idx: 10000  # Ending batch index for processing
 
+timesteps: 50  # Number of timesteps for the density estimation process
+
 dataset:
   root: "/scratch/inf0/user/mparcham/ILSVRC2012/"  # Root directory of the ImageNet dataset
   batch_size: 8  # Batch size for data loading
