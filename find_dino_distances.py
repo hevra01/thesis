@@ -170,49 +170,51 @@ def compute_nearest_centroid_distances(
     else:
         raise ValueError(f"Unsupported metric: {metric}")
 
-    min_distances, min_indices = torch.min(dist, dim=1)
-    return min_distances, min_indices
+    return dist
 
 
-def save_distances_to_json(
-    distances: torch.Tensor,
-    indices: torch.Tensor,
+def save_all_centroid_distances_to_json(
+    all_distances: torch.Tensor,   # [N, K]
     output_path: str,
-    num_clusters: int,
-    distance_metric: str,
+    distance_metric: str = "cosine",
 ):
     """
-    Save per-image DINO distances and nearest-centroid indices to a JSON file.
-
-    We assume images are presented in the same order as the dataloader (i.e.,
-    index 0 corresponds to the first image, etc.).
+    Save per-image distances to ALL centroids into a JSON file.
 
     Args:
-        distances:       Tensor [N] of nearest-centroid distances.
-        indices:         Tensor [N] of nearest-centroid indices.
-        output_path:     Path to the JSON file to write.
-        num_clusters:    Number of clusters used in KMeans.
-        distance_metric: Distance metric name ('euclidean' or 'cosine').
+        all_distances:   Tensor [N, K], distances[i, j] = distance(image_i, centroid_j)
+        output_path:     Path where JSON will be saved.
+        distance_metric: 'euclidean' or 'cosine'
     """
-    N = distances.shape[0]
-    print(f"Saving distances for {N} images to {output_path}")
+    all_distances = all_distances.cpu()
+    N, K = all_distances.shape
+
+    print(f"Saving full centroid distance matrix: {N} images × {K} centroids → {output_path}")
+
+    # Compute nearest-centroid info
+    min_distances, min_indices = torch.min(all_distances, dim=1)          # [N]
+    sorted_dists, sorted_indices = torch.sort(all_distances, dim=1)       # [N, K]
 
     data = {
-        "num_clusters": int(num_clusters),
-        "distance_metric": distance_metric,
         "num_images": int(N),
-        "images": [],
+        "num_centroids": int(K),
+        "distance_metric": distance_metric,
+        "images": []
     }
 
     for i in range(N):
         entry = {
             "index": int(i),
-            "nearest_centroid": int(indices[i].item()),
-            "dino_distance": float(distances[i].item()),
+            "nearest_centroid": int(min_indices[i].item()),
+            "nearest_distance": float(min_distances[i].item()),
+            "distances": all_distances[i].tolist(),              # 🔥 full distance vector
+            "sorted_distances": sorted_dists[i].tolist(),        # optional
+            "sorted_indices": sorted_indices[i].tolist(),        # optional
         }
         data["images"].append(entry)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
     with open(output_path, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -224,40 +226,28 @@ def parse_args():
         description="Compute DINO distances to nearest centroids for ImageNet val."
     )
     parser.add_argument(
-        "--dinov2_dir",
+        "--dinov2_feature_dir",
         type=str,
-        default="models/weights/dinov2-base",
-        help="Local directory containing DINOv2-base weights.",
-    )
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=64,
-        help="Batch size for feature extraction.",
-    )
-    parser.add_argument(
-        "--num_workers",
-        type=int,
-        default=4,
-        help="Number of DataLoader workers.",
+        default="data/datasets/dino_embeddings/val_categorized/dino_features.pt",
+        help="dino features are pre-computed.",
     )
     parser.add_argument(
         "--num_clusters",
         type=int,
         default=1000,
-        help="Number of KMeans clusters for DINO features.",
+        help="Number of clusters for KMeans.",
     )
     parser.add_argument(
         "--distance_metric",
         type=str,
-        default="euclidean",
+        default="cosine",
         choices=["euclidean", "cosine"],
         help="Distance metric for nearest-centroid computation.",
     )
     parser.add_argument(
         "--output_json",
         type=str,
-        default="outputs/dino_nearest_centroid_distances.json",
+        default="data/datasets/dino_embeddings/val_categorizedoutputs/dino_all_centroid_distances_cosine.json",
         help="Where to save the JSON with distances.",
     )
     return parser.parse_args()
@@ -266,45 +256,9 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # ---------------------------------------------------------------------
-    # 1) Instantiate the ImageNet val dataloader
-    # ---------------------------------------------------------------------
-    imagenet_val = get_imagenet_dataloader(
-        split="val_categorized",
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        shuffle=False,
-    )
-    print(f"Loaded ImageNet validation set with {len(imagenet_val.dataset)} images.")
-
-    # ---------------------------------------------------------------------
-    # 2) Load DINOv2-base model + processor from local folder
-    # ---------------------------------------------------------------------
-    dinov2_dir = args.dinov2_dir
-    processor = AutoImageProcessor.from_pretrained(
-        dinov2_dir,
-        local_files_only=True,
-    )
-    model = AutoModel.from_pretrained(
-        dinov2_dir,
-        local_files_only=True,
-    )
-
-    # Device setup
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    print(f"Using device: {device}")
-
-    # Freeze parameters (we only do inference)
-    for p in model.parameters():
-        p.requires_grad = False
-
-    # ---------------------------------------------------------------------
-    # 3) Extract DINO features for all images
-    # ---------------------------------------------------------------------
-    print("Extracting DINO features...")
-    features = get_dino_features(model, processor, imagenet_val, device)
-    print(f"Extracted features with shape: {features.shape}")  # [N, D]
+    # load dino features as .pt
+    features = torch.load(args.dinov2_feature_dir)
+    print(f"Loaded DINO features from {args.dinov2_feature_dir} with shape: {features.shape}")
 
     # ---------------------------------------------------------------------
     # 4) Run KMeans to obtain centroids
@@ -317,18 +271,16 @@ def main():
     print(
         f"Computing nearest-centroid distances using metric='{args.distance_metric}'..."
     )
-    min_distances, min_indices = compute_nearest_centroid_distances(
+    dist = compute_nearest_centroid_distances(
         features, centroids, metric=args.distance_metric
     )
 
     # ---------------------------------------------------------------------
     # 6) Save results to JSON
     # ---------------------------------------------------------------------
-    save_distances_to_json(
-        distances=min_distances,
-        indices=min_indices,
+    save_all_centroid_distances_to_json(
+        all_distances=dist,
         output_path=args.output_json,
-        num_clusters=args.num_clusters,
         distance_metric=args.distance_metric,
     )
 
