@@ -93,8 +93,22 @@ def main(cfg):
         # ---------------------------------------------------------------
 
         start_t = time.time()
+        # with get_bf16_context(enable_bf16):
+        #     integral_part, source_part = flextok.estimate_log_density(
+        #         images.to(device),
+        #         token_ids_list=token_ids_list,
+        #         hutchinson_samples=hutchinson_samples,
+        #         conditional=conditional,
+        #         timesteps=timesteps,
+        #         guidance_scale=guidance_scale
+        #     )
+        # current_integral = [d.item() for d in integral_part]
+        # current_source = [d.item() for d in source_part]
+        # current_densities = [[i,  s] for i, s in zip(current_integral, current_source)]
+        # densities.extend(current_densities)
+
         with get_bf16_context(enable_bf16):
-            integral_part, source_part = flextok.estimate_log_density(
+            integral_part = flextok.estimate_log_density(
                 images.to(device),
                 token_ids_list=token_ids_list,
                 hutchinson_samples=hutchinson_samples,
@@ -102,10 +116,7 @@ def main(cfg):
                 timesteps=timesteps,
                 guidance_scale=guidance_scale
             )
-        current_integral = [d.item() for d in integral_part]
-        current_source = [d.item() for d in source_part]
-        current_densities = [[i,  s] for i, s in zip(current_integral, current_source)]
-        densities.extend(current_densities)
+        densities.extend(integral_part)
 
         # Save incrementally
         with open(output_path, "w") as f:
