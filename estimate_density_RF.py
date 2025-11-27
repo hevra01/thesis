@@ -116,7 +116,15 @@ def main(cfg):
                 timesteps=timesteps,
                 guidance_scale=guidance_scale
             )
-        densities.extend(integral_part)
+
+        # integral_part is shape [B, 1], device='cuda'
+        integral_list = (
+            integral_part.detach()   # remove graph
+                        .cpu()      # move to CPU
+                        .squeeze(1) # shape [B]
+                        .tolist()   # -> List[float]
+        )
+        densities.extend(integral_list)
 
         # Save incrementally
         with open(output_path, "w") as f:
