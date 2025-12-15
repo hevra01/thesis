@@ -90,7 +90,7 @@ else
 fi
 
 # Construct output base path. estimate_density_RF.py appends _start_end.json.
-OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/val_density_old_remember
+OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/val_density_reconst_1/
 if [ -n "$SELECTED_KEEP_K" ]; then
   OUTPUT_BASE="$OUTPUT_ROOT/token_count/${SELECTED_KEEP_K}"
 else
@@ -120,10 +120,10 @@ fi
 ARGS+=(
   experiment.output_path=$OUTPUT_BASE
   experiment.register_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz
-  experiment.dataset.root=/ptmp/hevrapetek/ILSVR2012/
+  experiment.dataset.root=/ptmp/hevrapetek/reconstruction_imagenet_APC_true/val/reconst_1
   experiment.dataset.batch_size=20
   experiment.guidance_scale=7.5
-  experiment.dataset.split=val_categorized
+  experiment.dataset.split=""
   experiment.hutchinson_samples=4
 )
 
