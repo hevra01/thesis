@@ -2,7 +2,7 @@
 #SBATCH -J reconstruct_tokens
 #SBATCH -o /ptmp/hevrapetek/thesis/logs/current.out
 #SBATCH -e /ptmp/hevrapetek/thesis/logs/current.err
-#SBATCH --time=1-00:00:00
+#SBATCH --time=0-03:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -20,7 +20,7 @@ source /ptmp/hevrapetek/thesis/.wandb_secrets.sh
 # --- Configurable variables ---
 EXPERIMENT_NAME=${EXPERIMENT_NAME:-reconstruct_with_tokens}
 BASE_START_CLASS=${BASE_START_CLASS:-0}
-CLASSES_PER_JOB=${CLASSES_PER_JOB:-40}
+CLASSES_PER_JOB=${CLASSES_PER_JOB:-10}
 
 TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 START_CLASS=$(( BASE_START_CLASS + TASK_ID * CLASSES_PER_JOB ))

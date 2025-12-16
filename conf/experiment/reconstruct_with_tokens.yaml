@@ -24,3 +24,6 @@ batch_size: 90
 
 # APC on or off
 perform_apc: true
+
+# num of reconstructed samples per image. Different seeds end up havign different reconstructions even with same k tokens.
+num_reconstructions: 8

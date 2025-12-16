@@ -32,9 +32,13 @@ def main(cfg):
     batch_size = int(cfg.experiment.get("batch_size", 64))  # decode batch size
     start_class_idx = int(cfg.experiment.get("start_class_idx", 0))  # inclusive
     end_class_idx = int(cfg.experiment.get("end_class_idx", 1000))   # exclusive
+    
     # Defaults requested
     timesteps = 20
     guidance_scale = 7.5
+
+    # Number of reconstructions per image
+    num_reconstructions = cfg.experiment.get("num_reconstructions", 8)
 
     # APC on or off
     perform_apc = cfg.experiment.get("perform_apc", True)
@@ -118,32 +122,47 @@ def main(cfg):
 
             for k_keep in k_keep_list:
                 tokens_list_filtered = []
-                out_paths = []
+                # We will construct output paths per reconstruction index to avoid overwrites
+                base_out_paths = []
 
                 out_dir = os.path.join(base_out, f"reconst_{k_keep}", wnid)
                 os.makedirs(out_dir, exist_ok=True)
 
-                # Build tokens for this mini-batch and the corresponding output paths
+                # Build tokens for this mini-batch and the corresponding base output paths
                 for li, gi in zip(local_idxs, global_idxs):
                     ids_np = token_ids[gi, :k_keep]
                     ids_t = torch.from_numpy(np.asarray(ids_np, dtype=np.int64)).unsqueeze(0).to(device)
                     tokens_list_filtered.append(ids_t)
 
                     basename = names[li]
-                    
-                    out_paths.append(os.path.join(out_dir, basename))
+                    name_no_ext, ext = os.path.splitext(basename)
+                    # Optional: keep outputs per-image in a dedicated folder for organization
+                    img_out_dir = os.path.join(out_dir, name_no_ext)
+                    os.makedirs(img_out_dir, exist_ok=True)
+                    # Store the base (dir, name, ext) to build per-reconstruction filenames below
+                    base_out_paths.append((img_out_dir, name_no_ext, ext))
 
-                # Detokenize and save this mini-batch
-                with get_bf16_context(enable_bf16):
-                    reconstructed = model.detokenize(
-                        tokens_list_filtered,
-                        timesteps=timesteps,
-                        guidance_scale=guidance_scale, verbose=False,
-                        perform_norm_guidance=perform_apc,
-                    )  # [-1,1]
-                for img_t, out_path in zip(reconstructed, out_paths):
-                    save_image(((img_t.clamp(-1, 1) + 1) / 2), out_path)
-                    total_saved[int(k_keep)] += 1
+                # Perform exactly num_reconstructions reconstructions per image to generate multiple outputs
+                for recon_idx in range(num_reconstructions):
+                    # Detokenize and save this mini-batch
+                    with get_bf16_context(enable_bf16):
+                        reconstructed = model.detokenize(
+                            tokens_list_filtered,
+                            timesteps=timesteps,
+                            guidance_scale=guidance_scale, verbose=False,
+                            perform_norm_guidance=perform_apc,
+                        )  # [-1,1]
+
+                    # Build unique output path for each image using the reconstruction index
+                    out_paths = [
+                        os.path.join(dir_path, f"{name}_r{recon_idx}{ext}")
+                        for (dir_path, name, ext) in base_out_paths
+                    ]
+
+                    for img_t, out_path in zip(reconstructed, out_paths):
+                        # Save image in [0,1] range; suffix ensures different files per reconstruction
+                        save_image(((img_t.clamp(-1, 1) + 1) / 2), out_path)
+                        total_saved[int(k_keep)] += 1
 
         # Advance the global token offset by number of files in this class
         current_global += num_files
