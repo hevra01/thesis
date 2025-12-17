@@ -8,7 +8,6 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=16G
-#SBATCH --array=0-8
 
 # --------------------------------------------------
 # Environment setup
@@ -29,10 +28,11 @@ RECONST_K=${K_LIST[$SLURM_ARRAY_TASK_ID]}
 
 echo "Running LPIPS variance for reconst_k=${RECONST_K}"
 
-# --------------------------------------------------
-# Run experiment
-# --------------------------------------------------
-python find_variance_images_different_token_counts.py \
-  experiment.reconst_k=${RECONST_K} \
-  experiment.data_path="/ptmp/hevrapetek/reconstruction_imagenet_stochastic/val" \
-  experiment.out_file="/ptmp/hevrapetek/thesis/variance_lpips_results/reconst_${RECONST_K}.json"
+# --- Arguments for Python script --- 
+ARGS=(experiment=${EXPERIMENT_NAME:-estimate_variance_images_different_token_counts} 
+      experiment.reconst_k=${RECONST_K} 
+      experiment.data_path="/ptmp/hevrapetek/reconstruction_imagenet_stochastic/val" 
+      experiment.out_file="/ptmp/hevrapetek/thesis/variance_lpips_results/reconst_${RECONST_K}.json"
+ ) 
+
+python find_variance_images_different_token_counts.py "${ARGS[@]}"
