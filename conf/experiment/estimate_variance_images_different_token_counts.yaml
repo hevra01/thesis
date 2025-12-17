@@ -1,0 +1,8 @@
+data_path: "/ptmp/hevrapetek/reconstruction_imagenet_stochastic/val"
+out_file: "/ptmp/hevrapetek/thesis/variance_lpips_results.json"
+
+distance_functions:
+  - _target_: lpips.LPIPS
+    net: vgg
+
+device: "cuda"
