@@ -23,9 +23,11 @@ import json
 from typing import Dict, List
 from hydra.utils import instantiate
 import hydra
+from omegaconf import OmegaConf
 import torch
 from torchvision.io import read_image
 from torchvision.transforms.functional import resize
+import wandb
 
 def list_dir(path: str) -> List[str]:
     """Safe directory listing; returns sorted children or [] if path missing."""
@@ -125,6 +127,16 @@ def scan_reconstruction_root(root_path: str, distance_fns, device) -> Dict[str, 
                 mean_lp = mean_pairwise_lpips(img_paths, distance_fns, device)
                 results[reconst_dir][class_dir][image_id_dir] = mean_lp
 
+        # log wandb
+        wandb.log(
+            {
+                "progress/reconst_dir": reconst_dir,
+                "progress/class_name": class_dir,
+                "progress/status": "done"
+            }
+        )
+        
+
     return results
 
 
@@ -142,6 +154,14 @@ def main(cfg):
     - root_path: base directory containing reconst_{k} folders
     - out_json: path to write JSON results
     """
+
+    # Initialize W&B and dump Hydra config
+    wandb.init(
+        project="imagenet_reconstruct_tokens", 
+        name=f"imagenet_reconstruct_tokens_val", 
+        config=OmegaConf.to_container(cfg, resolve=True)
+    )
+    
     device = cfg.experiment.device
 
 
