@@ -1,0 +1,3 @@
+defaults:
+- experiment: ??? # the value of this key is set in the command line
+- _self_
