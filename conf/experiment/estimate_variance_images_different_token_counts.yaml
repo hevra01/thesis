@@ -1,8 +1,16 @@
+# Root directory containing reconst_{k} folders
 data_path: "/ptmp/hevrapetek/reconstruction_imagenet_stochastic/val"
-out_file: "/ptmp/hevrapetek/thesis/variance_lpips_results.json"
 
+# Token count for THIS job (override via SLURM or command line)
+reconst_k: 16
+
+# Output JSON for THIS token count
+out_file: "/ptmp/hevrapetek/thesis/variance_lpips_results/reconst_${experiment.reconst_k}.json"
+
+# LPIPS distance functions (can keep as list)
 distance_functions:
   - _target_: lpips.LPIPS
     net: vgg
 
+# Device to run LPIPS on
 device: "cuda"
