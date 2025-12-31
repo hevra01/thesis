@@ -8,7 +8,7 @@ optimizer:
   lr: 0.0001
 
 training:
-    num_epochs: 500
+    num_epochs: 200
     loss_training: 
       _target_: reconstruction_loss.GaussianCrossEntropyLoss
     loss_analysis: 
@@ -17,7 +17,7 @@ training:
 # this is for the main dataset that has the mse_errors, vgg_errors for all the images for different
 # values of k_values and the  bpp.
 reconstruction_dataset:
-  reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
+  reconstruction_data_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagenet_reconstruction_losses/val_categorized/all_APG_on.json"
   batch_size: 120 # this is the batch size for the reconstruction dataset
   shuffle: true
   # Optional: filter samples by an error range to simplify training.
@@ -27,15 +27,14 @@ reconstruction_dataset:
   #   key: vgg_error   # e.g., vgg_error | mse_error
   #   min: 2.83040   # e.g., 0.30
   #   max: 2.83640   # e.g., 0.35
+  reconstruction_loss: "LPIPS"  # e.g., "mse_error" or "vgg_error"
 
-checkpoint_path: "neural_baseline/checkpoint/loss_token_mse.pt"
-
-reconstruction_loss: "mse_error"  # e.g., "mse_error" or "vgg_error"
+checkpoint_path: "neural_baseline/checkpoint/loss_tokend_lpips.pt"
 
 # different experiments might use different splits of the data
 dataset:
-  split: "train"
+  split: "val_categorized"
 
-experiment_name: "token_estimator_given_loss"
+experiment_name: "token_estimator_given_loss_LPIPS"
 device: "cuda"
 

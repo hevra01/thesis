@@ -207,7 +207,6 @@ def main(cfg: DictConfig):
     # Training loop (resume-aware)
     # ---------------------------
     num_epochs = cfg.experiment.training.num_epochs
-    reconstruction_loss = cfg.experiment.reconstruction_loss
 
     # set the model in training mode
     token_count_predictor.train()
@@ -222,7 +221,7 @@ def main(cfg: DictConfig):
 
         for b_idx, batch in enumerate(recon_dataloader):
             # Model input: scalar reconstruction error per sample
-            reconstruction_loss_value = batch[reconstruction_loss].to(device).float().unsqueeze(1)
+            reconstruction_loss_value = batch[recon_loss_key].to(device).float().unsqueeze(1)
             # Training labels for GaussianCrossEntropyLoss: integer class indices in [1..C]
             k_value = batch["k_value"].to(device).long().view(-1)
 

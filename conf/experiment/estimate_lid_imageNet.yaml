@@ -1,0 +1,20 @@
+defaults:
+  - /model: guided_diffusion  # Use the Guided Diffusion model configuration
+  - /dataset: imageNet  # Use the ImageNet dataset configuration
+
+data_dim: 65536  # Dimension of the data, set to 256x256 for ImageNet
+checkpoint_path: output_hev/imagenet/checkpoint/256x256_diffusion_uncond.pt  # Path to the model checkpoint
+enable_fp16: true
+t_value: 15
+output_lid_file_path: /BS/data_mani_compress/work/thesis/thesis/data/datasets/imageNet_LID_values/training_set/lid_15  # Path to save the LID values
+
+start_batch_idx: 0
+end_batch_idx: 3125
+
+
+# --- override dataset here ---
+# because different experiments might handle different
+# batch sizes
+dataset:
+  batch_size: 16  # Override batch size for this experiment
+  split: "train"  # Use the categorized validation split for ImageNet

@@ -13,7 +13,7 @@ loss_functions:
 
   - _target_: reconstruction_loss.DINOv2FeatureLoss 
     # /ptmp/hevrapetek/thesis/models/weights/dinov2-base
-    dinov2_dir: /ptmp/hevrapetek/thesis/models/weights/dinov2-base
+    dinov2_dir: /BS/data_mani_compress/work/thesis/thesis/models/weights/dinov2-base
     use_pooler: true
     normalize: true
     loss_type: cosine
