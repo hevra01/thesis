@@ -2,7 +2,7 @@
 #SBATCH -J reconstruct_tokens
 #SBATCH -o /ptmp/hevrapetek/thesis/logs/current.out
 #SBATCH -e /ptmp/hevrapetek/thesis/logs/current.err
-#SBATCH --time=0-00:15:00
+#SBATCH --time=0-04:15:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -91,7 +91,7 @@ else
 fi
 
 # Construct output base path. estimate_density_RF.py appends _start_end.json.
-OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/val_density_div_list_reconst_1/
+OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/val_density_div_list_cond_uncond_reconst_1/
 if [ -n "$SELECTED_KEEP_K" ]; then
   OUTPUT_BASE="$OUTPUT_ROOT/token_count/${SELECTED_KEEP_K}"
 else
