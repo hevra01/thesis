@@ -102,9 +102,14 @@ def main(cfg):
                 timesteps=timesteps,
                 guidance_scale=guidance_scale
             )
-        current_integral = [d.item() for d in integral_part]
+        # integral_part: list[T] of [B]
+        integral_tensor = torch.stack(integral_part, dim=0)        # [T, B]
+        current_integral = integral_tensor.transpose(0, 1).tolist()  # [B][T]
+
         current_source = [d.item() for d in source_part]
-        current_densities = [[i,  s] for i, s in zip(current_integral, current_source)]
+
+        # now: per sample → [ [integral_list], source ]
+        current_densities = [[i, s] for i, s in zip(current_integral, current_source)]
         densities.extend(current_densities)
 
         # with get_bf16_context(enable_bf16):
