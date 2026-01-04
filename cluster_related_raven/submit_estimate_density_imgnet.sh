@@ -30,7 +30,7 @@ BATCHES_PER_JOB=${BATCHES_PER_JOB:-200}   # Adjust based on GPU time/memory
 # keep_k list (only used when USE_KEEP_K_SWEEP=1)
 if [ "$USE_KEEP_K_SWEEP" -eq 1 ]; then
 # [1,2,4,8,16,32,64,128,256] for conditional but 0 for unconditional
-  KEEP_K_LIST_RAW=${KEEP_K_LIST:-[256]}
+  KEEP_K_LIST_RAW=${KEEP_K_LIST:-[0]}
 else
   # Optional single override
   if [ -n "${KEEP_K_LIST:-}" ]; then
@@ -91,7 +91,7 @@ else
 fi
 
 # Construct output base path. estimate_density_RF.py appends _start_end.json.
-OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/val_density_div_list_cond_uncond_reconst_1/
+OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/val_density_div_list_reconst_8/
 if [ -n "$SELECTED_KEEP_K" ]; then
   OUTPUT_BASE="$OUTPUT_ROOT/token_count/${SELECTED_KEEP_K}"
 else
@@ -121,7 +121,7 @@ fi
 ARGS+=(
   experiment.output_path=$OUTPUT_BASE
   experiment.register_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz
-  experiment.dataset.root=/ptmp/hevrapetek/reconstruction_imagenet_APC_true/val/reconst_1
+  experiment.dataset.root=/ptmp/hevrapetek/reconstruction_imagenet_APC_true/val/reconst_8
   experiment.dataset.batch_size=20
   experiment.guidance_scale=7.5
   experiment.dataset.split=""

@@ -4,7 +4,7 @@ defaults:
 
 
 output_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagenet_reconstruction_losses_new/imagenet_densities_RF_0_unconditional.json"  # Path to save the estimated densities
-conditional: true  # Whether to perform conditional density estimation
+conditional: false  # Whether to perform conditional density estimation
 keep_k: 1
 hutchinson_samples: 4  # Number of samples for the Hutchinson estimator
 
