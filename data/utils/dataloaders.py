@@ -402,6 +402,7 @@ class clean_ReconstructionDataset_Heuristic(Dataset):
     def __init__(self, reconstruction_data, edge_ratio_information=None,
                  lid_information=None, local_density_information=None,
                  lpips_variance_information=None,
+                 dino_dist_information=None,
                  error_key: list[str] = ["vgg_error"]):
         """
         Args:
@@ -417,6 +418,7 @@ class clean_ReconstructionDataset_Heuristic(Dataset):
         self.lid_information = lid_information
         self.local_density_information = local_density_information
         self.lpips_variance_information = lpips_variance_information
+        self.dino_dist_information = dino_dist_information
 
         # Apply optional filtering on the provided error field
         self.num_original = len(reconstruction_data)
@@ -452,4 +454,6 @@ class clean_ReconstructionDataset_Heuristic(Dataset):
             out["local_density"] = self.local_density_information[k_value][image_id]
         if self.lpips_variance_information is not None:
             out["lpips_variance"] = self.lpips_variance_information[k_value][image_id]
+        if self.dino_dist_information is not None:
+            out["dino_dist"] = self.dino_dist_information[image_id]
         return out
