@@ -392,3 +392,60 @@ class ReconstructionDataset_Heuristic(Dataset):
         if self.local_density_information is not None:
             out["local_density"] = self.local_density_information[image_id]
         return out
+    
+
+class clean_ReconstructionDataset_Heuristic(Dataset):
+    """
+    this is different from ReconstructionDataset_token_based in the sense that this also has the edge information.
+    Optionally, it can include additional per-image scalar features such as LID and local density.
+    """
+    def __init__(self, reconstruction_data, edge_ratio_information=None,
+                 lid_information=None, local_density_information=None,
+                 error_key: list[str] = ["vgg_error"]):
+        """
+        Args:
+            reconstruction_data (list): List of dicts containing reconstruction metrics.
+                (img_id, k_value, mse_error, vgg_error, ...).
+            edge_ratio_information (list|dict|None): Per-image edge ratio values.
+            lid_information (list|dict|None): Per-image LID values.
+            local_density_information (list|dict|None): Per-image local density values.
+            error_key (str): Name of the error field in reconstruction_data to expose in samples.
+        """
+        self.reconstruction_data = reconstruction_data
+        self.edge_ratio_information = edge_ratio_information
+        self.lid_information = lid_information
+        self.local_density_information = local_density_information
+
+        # Apply optional filtering on the provided error field
+        self.num_original = len(reconstruction_data)
+        self.reconstruction_data = reconstruction_data
+        self.error_key = error_key
+
+    def __len__(self):
+        return len(self.reconstruction_data)
+
+    def __getitem__(self, idx):
+        """
+        Returns a dict with:
+          - error value under `self.error_key`
+          - k_value (int)
+          - optionally: edge_ratio, lid, local_density if the corresponding info was provided
+          - image_id (int) for traceability
+        """
+        data_point = self.reconstruction_data[idx]
+        k_value = data_point["k_value"]
+        err_vals = {key: data_point[key] for key in self.error_key}
+        image_id = data_point["image_id"]
+
+        out = {
+            **err_vals,
+            "k_value": k_value,
+            "image_id": image_id,
+        }
+        if self.edge_ratio_information is not None:
+            out["edge_ratio"] = self.edge_ratio_information[image_id]
+        if self.lid_information is not None:
+            out["lid"] = self.lid_information[k_value][image_id]
+        if self.local_density_information is not None:
+            out["local_density"] = self.local_density_information[k_value][image_id]
+        return out
