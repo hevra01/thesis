@@ -101,8 +101,9 @@ def main(cfg: DictConfig):
 
     # this is just to get the images from the dataloader to be used by ReconstructionDataset
     # we will need them for the compression_rate_predictor which will get the latents of the images to make bpp predictions. 
-    dataloader = instantiate(cfg.experiment.dataset)
     print(cfg.experiment.dataset.root)
+    dataloader = instantiate(cfg.experiment.dataset)
+    
 
     shuffle = cfg.experiment.reconstruction_dataset.shuffle
 
