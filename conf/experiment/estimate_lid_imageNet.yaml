@@ -17,4 +17,5 @@ end_batch_idx: 3125
 # batch sizes
 dataset:
   batch_size: 16  # Override batch size for this experiment
-  split: "train"  # Use the categorized validation split for ImageNet
+  split: ""  # Use the categorized validation split for ImageNet
+  root: "/BS/data_mani_compress/work/thesis/imagenet_reconstructed_APC_true/val_categorized/reconst_256"

@@ -57,6 +57,7 @@ def main(cfg: DictConfig):
     if is_main_process():
         run = wandb.init(
             name=cfg.experiment.experiment_name,
+            project=cfg.experiment.project_name,
             config=OmegaConf.to_container(cfg, resolve=True),
         )
         wandb.run.summary["run_id"] = run.id
@@ -101,6 +102,7 @@ def main(cfg: DictConfig):
     # this is just to get the images from the dataloader to be used by ReconstructionDataset
     # we will need them for the compression_rate_predictor which will get the latents of the images to make bpp predictions. 
     dataloader = instantiate(cfg.experiment.dataset)
+    print(cfg.experiment.dataset.root)
 
     shuffle = cfg.experiment.reconstruction_dataset.shuffle
 

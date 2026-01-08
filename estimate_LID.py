@@ -22,8 +22,8 @@ def main(cfg):
 
     # Initialize W&B and dump Hydra config
     wandb.init(
-        project="dataset_prep",  
-        name=f"LID_estimate_{start_batch_idx:04d}_{end_batch_idx:04d}",
+        project="LID_estimate",  
+        name=f"LID_estimate_reconst_1{start_batch_idx:04d}_{end_batch_idx:04d}",
         config=OmegaConf.to_container(cfg, resolve=True)
     )
 
@@ -42,7 +42,8 @@ def main(cfg):
     checkpoint_path = cfg.experiment.checkpoint_path
 
     # Format output filename to include batch range
-    base_output_path = cfg.experiment.output_lid_file_path  
+    base_output_path = cfg.experiment.output_lid_file_path
+    #os.makedirs(os.path.dirname(base_output_path), exist_ok=True)  
     output_path = f"{base_output_path}_{start_batch_idx:04d}_{end_batch_idx:04d}.json"
 
     # Load the pretrained checkpoint
