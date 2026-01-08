@@ -16,7 +16,7 @@ training:
 # this is for the main dataset that has the mse_errors, vgg_errors for all the images for different
 # values of k_values and the  bpp.
 reconstruction_dataset:
-  reconstruction_data_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagenet_reconstruction_losses/val_categorized/all_APG_on.json"
+  reconstruction_data_path: "data/datasets/imagenet_reconstruction_losses/train/all_losses.json"
   batch_size: 180 # this is the batch size for the reconstruction dataset on A40, 4 GPU, 180 batch size is possible
   shuffle: true
   reconstruction_loss: "L1Loss"  # e.g., "mse_error" or "vgg_error"
