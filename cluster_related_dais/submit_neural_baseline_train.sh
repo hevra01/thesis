@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J neural_baseline_train
-#SBATCH -o /dais/u/hevrapetek/thesis/logs/current.out
-#SBATCH -e /dais/u/hevrapetek/thesis/logs/current.err
+#SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
+#SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
 #SBATCH --time=0-01:00:00
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
@@ -30,10 +30,10 @@ NUM_GPUS=${SLURM_GPUS_ON_NODE:-4}
 
 # --- Arguments for Hydra / Python module ---
 # Start with the experiment choice
-ARGS=( "experiment=token_estimator_regression_neural_baseline_training"
-	   "experiment.dataset.root=/dais/fs/scratch/hevrapetek/"
-     "experiment.dataset.split=train"
-	   "experiment.project_name=neural_baselines"
+ARGS=( experiment=token_estimator_regression_neural_baseline_training
+	   experiment.dataset.root="/dais/fs/scratch/hevrapetek/"
+     experiment.dataset.split=train
+	   experiment.project_name=neural_baselines
  )
 
 
@@ -42,6 +42,6 @@ echo "[RUN] Hydra args:"
 printf '  %q\n' "${ARGS[@]}"
 
 # --- Run ---
-torchrun --standalone --nproc_per_node="${NUM_GPUS}" \
+HYDRA_FULL_ERROR=1 torchrun --standalone --nproc_per_node="${NUM_GPUS}" \
   -m neural_baseline.training \
   "${ARGS[@]}"

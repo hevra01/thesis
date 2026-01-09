@@ -30,10 +30,11 @@ reconstruction_dataset:
 
 checkpoint_path: "neural_baseline/checkpoint/L1Loss.pt"
 
+project_name: neural_baselines
 
 # different experiments might use different splits of the data
 dataset:
   split: "val_categorized"
   transform_profile: "sd_vae"  # 224 when using clip, 256 when using resnet
-
+  root: "test"
 experiment_name: "clean_regression_val_L1Loss"
