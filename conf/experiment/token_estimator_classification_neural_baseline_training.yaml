@@ -17,12 +17,20 @@ training:
 # this is for the main dataset that has the mse_errors, vgg_errors for all the images for different
 # values of k_values and the  bpp.
 reconstruction_dataset:
-  reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
-  batch_size: 32 # this is the batch size for the reconstruction dataset
+  reconstruction_data_path: "data/datasets/imagenet_reconstruction_losses/train/all_losses.json"
+  batch_size: 180 # this is the batch size for the reconstruction dataset on A40, 4 GPU, 180 batch size is possible
   shuffle: true
+  reconstruction_loss: "LPIPS"  # e.g., "mse_error" or "vgg_error"
+  
 
-checkpoint_path: "neural_baseline/checkpoint/last_classification.pt"
+checkpoint_path: "neural_baseline/checkpoint/LPIPS.pt"
 
 
+head: classification
+
+# different experiments might use different splits of the data
 dataset:
-  split: "train"
+  split: "val_categorized"
+  transform_profile: "sd_vae"  # 224 when using clip, 256 when using resnet
+
+experiment_name: "classification"

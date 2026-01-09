@@ -4,9 +4,13 @@ _target_: models.neural_token_count_predictor.NeuralTokenCountPredictor
 # device to run on
 device: cuda      
 
-# --- Backbone/feature extractor: can be either a CNN alone or VAE encoder & CNN---
-apply_VAE_encoder: false
+# --- Backbone/feature extractor: can be either a CNN alone or VAE encoder & CNN or Resnet---
+# one of: sd-vae | resnet | rgb
+backbone_type: "sd-vae"
 
+# used when backbone == "sd-vae"
+hf_hub_path: "stabilityai/sd-vae-ft-mse" # dim size is 4, 32, 32
+freeze_vae: true
 
 # --- CNN trunk (for RGB path) ---
 # We define per-layer channels and strides. Stride=2 downsamples spatially.
@@ -14,22 +18,18 @@ apply_VAE_encoder: false
 #   C0:  3 →  32 @ 128x128   (stride 2)
 #   C1: 32 →  64 @ 64x64   (stride 2)
 #   C2: 64 → 128 @  32x32   (stride 2)
-conv_channels: [32, 64, 128]       # output channels for each conv block
-conv_strides:  [2,   2,   2]         # stride per conv block (same length)
-norm: group                                # group | batch | none
+use_cnn: true
+conv_channels: [16, 32, 64]       # output channels for each conv block. empty for clip
+conv_strides:  [2, 2, 2]         # stride per conv block (same length)
+norm: group                           # group | batch | none
 num_groups: 8                               # used if norm=group
-conv_activation: silu                      # relu | gelu | silu | tanh  (don't apply classification to the last layer)
+activation: silu                      # relu | gelu | silu | tanh
 dropout2d: 0.10                            # dropout after conv blocks (2D)
 
 # Optional pooling after the conv stack:
 #   none  → keep spatial dims, then flatten
 #   gap   → global average pool to [B, C], skip flatten
-post_conv_pool: gap                       # none | gap
-
-
-# --- Conditioning vector (tolerated loss etc.) ---
-loss_dim: 1                               # size of conditioning vector
-loss_proj_dim: 1                         # embed cond → this many dims
+post_conv_pool: flatten                 # none | gap | flatten
 
 
 # --- Task ---
@@ -37,6 +37,50 @@ head: "classification"               # classification | regression
 num_classes: 256                     # for classification: predict counts in {1..256}. for regression: predicts only 1 class
 
 
-# --- Fully-connected head (classification) ---
+# --- Fully-connected head (regression) ---
 # Applied after (flatten OR GAP) and concat with loss embedding.
-fc_hidden: [512, 256]                      # MLP widths; [] means direct to logits
+fc_hidden: [32, 16]
+
+
+# --- Optional Transformer aggregator (after conv/backbone) ---
+# When enabled, treats [B,C,H,W] features as a sequence and encodes with a Transformer.
+# Recommended when you want more expressive modeling than simple GAP/flatten.
+use_transformer: true                 # set true to enable
+transformer_dim: 256                   # internal d_model; will project conv C -> d_model if different
+
+# Each layer typically has:
+# A self-attention block (learns relationships between tokens),
+# A feed-forward block (MLP to mix information).
+# This sets how many Transformer blocks you stack on top of each other.
+transformer_layers: 4
+transformer_nhead: 8
+transformer_mlp_ratio: 4.0
+transformer_dropout: 0.1
+transformer_add_cls: true              # add a [CLS] token and use it for pooling
+transformer_pool: cls                  # cls | mean: This tells the model how to combine token outputs into a single vector before the final layer.
+pos_encoding: sincos2d                 # sincos2d | none
+
+input_resolution: [256, 256]          # Provide this to enable eager FC head build for 'flatten' pooling by computing spatial dims analytically instead of waiting for a real batch.
+
+
+
+# --- Conditioning vector (tolerated loss etc.) ---
+use_loss_condition: true
+loss_dim: 1                               # size of conditioning vector (e.g., tolerated reconstruction error)
+loss_proj_dim: 164                        # embed cond → this many dims (shared for all locations)
+
+# Where to inject the conditioning signal. You can specify multiple locations.
+# Allowed values:
+#   - after_backbone: inject right after backbone output.
+#       • For spatial maps (sd-vae/resnet/rgb), the loss embedding is tiled and concatenated as extra channels
+#         before the Conv2d blocks.
+#       • For pooled vectors (e.g., CLIP pooled when conv_channels is empty and no transformer), it's concatenated
+#         to the feature vector.
+#       • Ignored for token sequences (e.g., CLIP tokens) — use transformer_token instead.
+#   - transformer_token: prepend a learned token derived from the loss to the Transformer input.
+#       • Requires use_transformer: true.
+#   - adaln: apply FiLM-style modulation (per-block gamma/beta) inside each Conv block.
+#       • Requires conv_channels not empty. Safe to use together with after_backbone.
+#   - head: concatenate the loss embedding right before the final FC head (on the pooled/flattened features).
+# Example: [after_backbone, adaln] or [transformer_token, head]
+conditioning_locations: [adaln]
