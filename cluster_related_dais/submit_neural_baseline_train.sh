@@ -30,7 +30,7 @@ NUM_GPUS=${SLURM_GPUS_ON_NODE:-4}
 
 # --- Arguments for Hydra / Python module ---
 # Start with the experiment choice
-ARGS=( experiment=token_estimator_regression_neural_baseline_training
+ARGS=( experiment=token_estimator_classification_neural_baseline_training
 	   experiment.dataset.root="/dais/fs/scratch/hevrapetek/"
      experiment.dataset.split=train
 	   experiment.project_name=neural_baselines
