@@ -14,6 +14,8 @@ resnet_layer: "layer1"          # "layer2" (128x32x32) or "layer3" (256x16x16)
 resnet_feature_dim: 64  # feature dimension of the extracted layer 64 for layer1, 128 for layer2, 256 for layer3
 resnet_pretrained: true
 
+input_resolution: [256, 256]
+
 # --- CNN trunk (for RGB path) ---
 # We define per-layer channels and strides. Stride=2 downsamples spatially.
 # Example below (for 256x256 images → latents ~ [B,4,32,32]):
@@ -34,7 +36,7 @@ post_conv_pool: none                       # none | gap
 
 
 # --- Conditioning vector (tolerated loss etc.) ---
-use_loss_condition: false
+use_loss_condition: true
 loss_dim: 1                               # size of conditioning vector
 loss_proj_dim: 164                        # embed cond → this many dims
 

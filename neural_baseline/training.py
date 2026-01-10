@@ -191,6 +191,8 @@ def main(cfg: DictConfig):
     # 5) Resume checkpoint (single file)
     # =======================
     checkpoint_path = cfg.experiment.checkpoint_path
+    # create directory if it doesn't exist
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
     start_epoch = 0
 
     if os.path.isfile(checkpoint_path):

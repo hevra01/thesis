@@ -2,10 +2,10 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-01:00:00
+#SBATCH --time=0-10:00:00
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:4
-#SBATCH --mem=100000M
+#SBATCH --gres=gpu:h200:4
+#SBATCH --mem=550000
 
 # --- Environment setup ---
 module purge
@@ -33,6 +33,7 @@ NUM_GPUS=${SLURM_GPUS_ON_NODE:-4}
 ARGS=( experiment=token_estimator_classification_neural_baseline_training
 	   experiment.dataset.root="/dais/fs/scratch/hevrapetek/"
      experiment.dataset.split=train
+     experiment.reconstruction_dataset.batch_size=700
 	   experiment.project_name=neural_baselines
  )
 
