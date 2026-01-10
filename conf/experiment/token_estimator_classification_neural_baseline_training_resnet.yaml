@@ -27,7 +27,7 @@ reconstruction_dataset:
 
 project_name: neural_baselines_resnet_classification
 
-checkpoint_path: "neural_baseline/checkpoint/LPIPS.pt"
+checkpoint_path: "neural_baseline/checkpoint/LPIPS"
 
 
 # different experiments might use different splits of the data
