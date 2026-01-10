@@ -3,13 +3,31 @@ import torch.nn as nn
 import torchvision.models as models
 
 class ResNetCondClassifier(nn.Module):
-    def __init__(self, num_classes: int, backbone="resnet50", pretrained=True, use_condition: bool = False):
+    def __init__(
+        self,
+        num_classes: int,
+        backbone: str = "resnet50",
+        pretrained: bool = True,
+        use_condition: bool = True,
+        freeze_backbone: bool = False,
+        keep_backbone_eval: bool = True,
+    ):
         super().__init__()
         weights = "IMAGENET1K_V2" if pretrained else None
         self.backbone = getattr(models, backbone)(weights=weights)
 
         in_dim = self.backbone.fc.in_features
         self.backbone.fc = nn.Identity()
+
+        # Freeze backbone params if requested (train only the head)
+        self.freeze_backbone = bool(freeze_backbone)
+        self.keep_backbone_eval = bool(keep_backbone_eval)
+        if self.freeze_backbone:
+            for p in self.backbone.parameters():
+                p.requires_grad = False
+            if self.keep_backbone_eval:
+                # Avoid BatchNorm running stats updates
+                self.backbone.eval()
 
         self.use_condition = use_condition
         cond_dim = 32 if use_condition else 0
@@ -25,6 +43,9 @@ class ResNetCondClassifier(nn.Module):
         self.classifier = nn.Linear(in_dim + cond_dim, num_classes)
 
     def forward(self, x, recon_loss_scalar=None):
+        # Ensure backbone stays in eval during training if frozen
+        if self.freeze_backbone and self.keep_backbone_eval:
+            self.backbone.eval()
         f = self.backbone(x)
 
         if self.use_condition:
@@ -37,3 +58,26 @@ class ResNetCondClassifier(nn.Module):
             return self.classifier(z)
         else:
             return self.classifier(f)
+
+    def train(self, mode: bool = True):
+        """Override to keep frozen backbone in eval when training.
+
+        When `freeze_backbone=True` and `keep_backbone_eval=True`, the backbone
+        is kept in eval mode even if the module is in train mode; this avoids
+        BatchNorm running-stat updates while training the head.
+        """
+        super().train(mode)
+        if self.freeze_backbone and self.keep_backbone_eval:
+            self.backbone.eval()
+        return self
+
+    def head_parameters(self):
+        """Return an iterable of parameters for the trainable head only.
+
+        Includes `classifier` and, if enabled, `cond_mlp`.
+        Useful for constructing an optimizer that excludes the frozen backbone.
+        """
+        params = list(self.classifier.parameters())
+        if self.use_condition and self.cond_mlp is not None:
+            params += list(self.cond_mlp.parameters())
+        return params

@@ -12,3 +12,9 @@ backbone: "resnet50"
 pretrained: true
 use_condition: false
 
+# Freeze the ResNet backbone and train only the head.
+freeze_backbone: true
+
+# Keep the frozen backbone in eval mode to avoid BatchNorm running-stat updates.
+keep_backbone_eval: true
+

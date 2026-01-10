@@ -174,7 +174,11 @@ def main(cfg: DictConfig):
         print("len(recon_dataloader.dataset):", len(recon_dataloader.dataset))
         print("model:\n", token_count_predictor)
 
-    optimizer = instantiate(cfg.experiment.optimizer, params=token_count_predictor.parameters())
+    optimizer = instantiate(
+    cfg.experiment.optimizer,
+        params=[p for p in token_count_predictor.parameters() if p.requires_grad]
+    )
+
 
     # training_loss:
     #  - classification: Gaussian-soft cross-entropy (expects counts in [1..C])
