@@ -225,23 +225,6 @@ def main(cfg: DictConfig):
     num_epochs = int(cfg.experiment.training.num_epochs)
     token_count_predictor.train()
 
-    # (Optional) log dataset filtering info
-    if is_main_process() and getattr(recon_dataset, "filter_key", None) is not None:
-        print(
-            f"Applied filtering on '{recon_dataset.filter_key}' in range {recon_dataset.filter_bounds}; "
-            f"kept {recon_dataset.num_kept}/{recon_dataset.num_original} samples (missing_key={recon_dataset.missing_key_count})"
-        )
-        wandb.log(
-            {
-                "filter/key": recon_dataset.filter_key,
-                "filter/min": recon_dataset.filter_bounds[0],
-                "filter/max": recon_dataset.filter_bounds[1],
-                "filter/kept": recon_dataset.num_kept,
-                "filter/original": recon_dataset.num_original,
-                "filter/missing_key": recon_dataset.missing_key_count,
-            }
-        )
-
     # Global step for W&B batch logging
     global_step = start_epoch * len(recon_dataloader)
 

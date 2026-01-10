@@ -42,7 +42,7 @@ loss_proj_dim: 164                        # embed cond → this many dims
 
 
 # --- Task ---
-head: "regression"               # classification | regression
+head: "classification"               # classification | regression
 num_classes: 256                     # for classification: predict counts in {1..256}. for regression: predicts only 1 class
 
 
