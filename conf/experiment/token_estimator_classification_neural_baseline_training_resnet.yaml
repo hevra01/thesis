@@ -1,0 +1,38 @@
+defaults:
+  - /model: resnet_fine_tune
+  - /dataset: imageNet
+
+
+optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.001
+
+training:
+    num_epochs: 100
+    loss_training: 
+      _target_: reconstruction_loss.GaussianCrossEntropyLoss
+    loss_analysis: 
+      _target_: reconstruction_loss.MAELoss
+
+# this is for the main dataset that has the mse_errors, vgg_errors for all the images for different
+# values of k_values and the  bpp.
+reconstruction_dataset:
+  reconstruction_data_path: "data/datasets/imagenet_reconstruction_losses/train/all_losses.json"
+  batch_size: 180 # this is the batch size for the reconstruction dataset on A40, 4 GPU, 180 batch size is possible
+  shuffle: true
+  reconstruction_loss: "LPIPS"  # e.g., "mse_error" or "vgg_error"
+  filter_key: "LPIPS"
+  min_error: 0.02079272
+  max_error: 0.12662399
+
+project_name: neural_baselines_resnet_classification
+
+checkpoint_path: "neural_baseline/checkpoint/LPIPS.pt"
+
+
+# different experiments might use different splits of the data
+dataset:
+  split: "val_categorized"
+  transform_profile: "imagenet"  # 224 when using clip, 256 when using resnet
+
+experiment_name: "classification_resnet"

@@ -1,0 +1,14 @@
+_target_: models.resnet.ResNetCondClassifier
+
+# Number of classes for the classifier.
+# Set to 1000 for ImageNet; adjust as needed.
+num_classes: 256
+
+# Torchvision ResNet backbone to use.
+# Options include: resnet18, resnet34, resnet50, resnet101, resnet152.
+backbone: "resnet50"
+
+# Whether to load ImageNet pretrained weights for the backbone.
+pretrained: true
+use_condition: false
+
