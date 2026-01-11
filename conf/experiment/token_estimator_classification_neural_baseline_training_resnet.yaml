@@ -11,6 +11,7 @@ training:
     num_epochs: 100
     loss_training: 
       _target_: reconstruction_loss.GaussianCrossEntropyLoss
+      sigma: 1.2
     loss_analysis: 
       _target_: reconstruction_loss.MAELoss
 
@@ -36,3 +37,6 @@ dataset:
   transform_profile: "imagenet"  # 224 when using clip, 256 when using resnet
 
 experiment_name: "classification_resnet"
+
+model:
+  freeze_backbone: false
