@@ -60,6 +60,7 @@ def main(cfg: DictConfig):
         run = wandb.init(
             name=cfg.experiment.experiment_name,
             project=cfg.experiment.project_name,
+            group=cfg.experiment.group_name,
             config=OmegaConf.to_container(cfg, resolve=True),
         )
         wandb.run.summary["run_id"] = run.id
@@ -70,24 +71,33 @@ def main(cfg: DictConfig):
             num_visible = torch.cuda.device_count() if torch.cuda.is_available() else 0
             gpu_names = [torch.cuda.get_device_name(i) for i in range(num_visible)] if num_visible > 0 else []
             ddp_info = {
-                "ddp/enabled": dist_is_initialized(),
-                "ddp/world_size": get_world_size(),
-                "ddp/rank": get_rank(),
-                "ddp/local_rank": local_rank,
-                "cuda/available": torch.cuda.is_available(),
-                "cuda/num_visible_gpus": num_visible,
-                "cuda/device": str(device),
-                "cuda/visible_devices_env": os.environ.get("CUDA_VISIBLE_DEVICES", ""),
-                "nccl/debug": os.environ.get("NCCL_DEBUG", ""),
-                "nccl/async_error_handling": os.environ.get("NCCL_ASYNC_ERROR_HANDLING", ""),
-                "omp/num_threads": os.environ.get("OMP_NUM_THREADS", ""),
-                "cudnn/benchmark": bool(torch.backends.cudnn.benchmark),
-                "torch/version": torch.__version__,
-                "cuda/gpu_names": "; ".join(gpu_names) if gpu_names else "",
+                "ddp": {
+                    "enabled": dist_is_initialized(),
+                    "world_size": get_world_size(),
+                    "rank": get_rank(),
+                    "local_rank": local_rank,
+                },
+                "cuda": {
+                    "available": torch.cuda.is_available(),
+                    "num_visible_gpus": num_visible,
+                    "device": str(device),
+                    "visible_devices_env": os.environ.get("CUDA_VISIBLE_DEVICES", ""),
+                    "gpu_names": "; ".join(gpu_names) if gpu_names else "",
+                },
+                "nccl": {
+                    "debug": os.environ.get("NCCL_DEBUG", ""),
+                    "async_error_handling": os.environ.get("NCCL_ASYNC_ERROR_HANDLING", ""),
+                },
+                "omp": {
+                    "num_threads": os.environ.get("OMP_NUM_THREADS", ""),
+                },
+                "cudnn": {
+                    "benchmark": bool(torch.backends.cudnn.benchmark),
+                },
+                "torch": {
+                    "version": torch.__version__,
+                },
             }
-            print("[DDP] Runtime info:")
-            for k, v in ddp_info.items():
-                print(f"  - {k}: {v}")
             wandb.config.update(ddp_info)
         except Exception as e:
             print(f"[DDP] Failed to gather/log runtime info: {e}")

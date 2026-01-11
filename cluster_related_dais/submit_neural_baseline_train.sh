@@ -56,6 +56,7 @@ MIN_ERR=${MIN_ERRORS[$JOB_INDEX]}
 MAX_ERR=${MAX_ERRORS[$JOB_INDEX]}
 
 echo "[RUN] Using LPIPS bin index $JOB_INDEX: min_error=$MIN_ERR, max_error=$MAX_ERR"
+SIGMA=0.6
 
 # --- Arguments for Hydra / Python module ---
 # Start with the experiment choice
@@ -66,6 +67,8 @@ ARGS=( experiment=token_estimator_classification_neural_baseline_training_resnet
 	   experiment.project_name=neural_baselines
      experiment.reconstruction_dataset.min_error=${MIN_ERR}
      experiment.reconstruction_dataset.max_error=${MAX_ERR}
+     experiment.group_name="LPIPS_range_finetune_resnet_sigma=${SIGMA}"
+     experiment.training.loss_training.sigma=${SIGMA}
  )
 
 

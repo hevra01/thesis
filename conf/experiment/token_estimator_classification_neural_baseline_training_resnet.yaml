@@ -26,8 +26,9 @@ reconstruction_dataset:
   min_error: 0.02079272
   max_error: 0.12662399
 
+experiment_name: "classification_resnet"
 project_name: neural_baselines_resnet_classification
-
+group_name: resnet_baseline_experiments
 checkpoint_path: "neural_baseline/checkpoint/LPIPS/"
 
 
@@ -36,7 +37,6 @@ dataset:
   split: "val_categorized"
   transform_profile: "imagenet"  # 224 when using clip, 256 when using resnet
 
-experiment_name: "classification_resnet"
 
 model:
   freeze_backbone: false
