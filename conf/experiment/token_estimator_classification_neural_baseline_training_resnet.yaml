@@ -11,7 +11,7 @@ training:
     num_epochs: 100
     loss_training: 
       _target_: reconstruction_loss.GaussianCrossEntropyLoss
-      sigma: 1.2
+      sigma: 0.2
     loss_analysis: 
       _target_: reconstruction_loss.MAELoss
 
@@ -22,9 +22,9 @@ reconstruction_dataset:
   batch_size: 180 # this is the batch size for the reconstruction dataset on A40, 4 GPU, 180 batch size is possible
   shuffle: true
   reconstruction_loss: "LPIPS"  # e.g., "mse_error" or "vgg_error"
-  filter_key: "LPIPS"
-  min_error: 0.02079272
-  max_error: 0.12662399
+  # filter_key: none
+  # min_error: 0.02079272
+  # max_error: 0.12662399
 
 experiment_name: "classification_resnet"
 project_name: neural_baselines_resnet_classification
@@ -40,3 +40,4 @@ dataset:
 
 model:
   freeze_backbone: false
+  use_condition:  true

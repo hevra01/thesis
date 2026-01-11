@@ -67,7 +67,7 @@ ARGS=( experiment=token_estimator_classification_neural_baseline_training_resnet
 	   experiment.project_name=neural_baselines
      experiment.reconstruction_dataset.min_error=${MIN_ERR}
      experiment.reconstruction_dataset.max_error=${MAX_ERR}
-     experiment.group_name="LPIPS_range_finetune_resnet_sigma=${SIGMA}"
+     experiment.group_name="LPIPS_all_finetune_resnet_sigma=${SIGMA}"
      experiment.training.loss_training.sigma=${SIGMA}
  )
 
