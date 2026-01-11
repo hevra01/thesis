@@ -105,7 +105,7 @@ def main(cfg: DictConfig):
     shuffle = bool(cfg.experiment.reconstruction_dataset.shuffle)
 
     # Optional filtering to constrain error range
-    filt_cfg = getattr(cfg.experiment.reconstruction_dataset, "filter", None)
+    filt_cfg = getattr(cfg.experiment.reconstruction_dataset, "filter_key", None)
     if filt_cfg is not None:
         filter_key = getattr(filt_cfg, "key", None)
         min_error = getattr(filt_cfg, "min", None)
