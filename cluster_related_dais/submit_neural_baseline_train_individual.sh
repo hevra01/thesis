@@ -64,7 +64,7 @@ SIGMA=0.6
 ARGS=( 
      experiment=token_estimator_classification_neural_baseline_training_resnet
 
-	   experiment.dataset.root="/dais/fs/scratch/hevrapetek/"
+	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
 
      experiment.reconstruction_dataset.batch_size=1024
      experiment.reconstruction_dataset.min_error=${MIN_ERR}

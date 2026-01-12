@@ -2,19 +2,17 @@ defaults:
   - /model: resnet_fine_tune
   - /dataset: imageNet
 
-# different experiments might use different splits of the data
-dataset:
-  transform_profile: "imagenet"  # 224 when using clip, 256 when using resnet
+dataset_root: /scratch/inf0/user/mparcham/ILSVRC2012
 
 dataset_train:
-  _target_: ${dataset._target_}
-  root: ${dataset.root}
+  _target_: data.utils.dataloaders.get_imagenet_dataloader
+  root: ${dataset_root}
   split: train
   train_or_eval: "train"
 
 dataset_val:
-  _target_: ${dataset._target_}
-  root: ${dataset.root}
+  _target_: data.utils.dataloaders.get_imagenet_dataloader
+  root: ${dataset_root}
   split: val_categorized
   train_or_eval: "eval"
 
