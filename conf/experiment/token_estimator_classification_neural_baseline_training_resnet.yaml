@@ -6,13 +6,13 @@ dataset_root: /scratch/inf0/user/mparcham/ILSVRC2012
 
 dataset_train:
   _target_: data.utils.dataloaders.get_imagenet_dataloader
-  root: ${dataset_root}
+  root: ${experiment.dataset_root}
   split: train
   train_or_eval: "train"
 
 dataset_val:
   _target_: data.utils.dataloaders.get_imagenet_dataloader
-  root: ${dataset_root}
+  root: ${experiment.dataset_root}
   split: val_categorized
   train_or_eval: "eval"
 
