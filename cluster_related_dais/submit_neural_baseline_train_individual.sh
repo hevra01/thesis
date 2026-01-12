@@ -4,6 +4,8 @@
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
 #SBATCH --time=0-3:00:00
 #SBATCH --nodes=1
+#SBATCH --mem=100000
+
 #SBATCH --gres=gpu:h200:2
 
 # --- Environment setup ---
