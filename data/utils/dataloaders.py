@@ -21,9 +21,9 @@ CLIP_STD  = [0.26862954, 0.26130258, 0.27577711]
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD  = [0.229, 0.224, 0.225]
 
-
 def build_imagenet_transform(
     profile: str = "imagenet",
+    train_or_eval = "eval"
 ):
     """
     Build a torchvision transform pipeline for different backbones with fixed,
@@ -36,17 +36,29 @@ def build_imagenet_transform(
     profile = (profile or "imagenet").lower()
     if profile == "clip":
         size = 224
+        crop_size = 224
         mean, std = CLIP_MEAN, CLIP_STD
     elif profile == "sd_vae":
         size = 256
+        crop_size = 256
         mean, std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
-    else:
+    elif profile == "imagenet":
         size = 256
+        crop_size = 224
         mean, std = IMAGENET_MEAN, IMAGENET_STD
+
+        if train_or_eval == "train":
+            return T.Compose([
+                T.Resize(size),
+                T.RandomCrop(crop_size),
+                T.RandomHorizontalFlip(),      # data augmentation
+                T.ToTensor(),
+                T.Normalize(mean=mean, std=std),
+            ])
 
     return T.Compose([
         T.Resize(size),
-        T.CenterCrop(size),
+        T.CenterCrop(crop_size),
         T.ToTensor(),
         T.Normalize(mean=mean, std=std),
     ])
@@ -102,6 +114,7 @@ def get_imagenet_dataloader(
     num_workers=16,
     shuffle=False,
     transform_profile: str = "imagenet",
+    train_or_eval="eval", # this will be used to determine the transformation
     transform=None,
 ):
     """Flexible ImageNet loader with fixed, profile-based transforms.
@@ -110,7 +123,7 @@ def get_imagenet_dataloader(
     """
     # Build transform unless custom provided
     if transform is None:
-        transform = build_imagenet_transform(profile=transform_profile)
+        transform = build_imagenet_transform(profile=transform_profile, train_or_eval=train_or_eval)
 
     data_root = f"{root}/{split}"
     has_class_subdirs = any(Path(data_root).glob("*/"))

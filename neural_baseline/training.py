@@ -172,14 +172,14 @@ def main(cfg: DictConfig):
             print(f"[DDP] Failed to gather/log runtime info: {e}")
 
     # =======================
-    # 3) Load data + DataLoader
+    # 3) Load data + DataLoader for train set
     # =======================
     # reconstruction_data holds per-image errors for multiple K values + token counts.
-    with open(cfg.experiment.reconstruction_dataset.reconstruction_data_path, "r") as f:
-        reconstruction_data = json.load(f)
+    with open(cfg.experiment.reconstruction_dataset.reconstruction_train_data_path, "r") as f:
+        train_reconstruction_data = json.load(f)
 
     # This base dataloader supplies images to the ReconstructionDataset implementation.
-    base_dataloader = instantiate(cfg.experiment.dataset)
+    train_base_dataloader = instantiate(cfg.experiment.dataset_train)
 
     shuffle = bool(cfg.experiment.reconstruction_dataset.shuffle)
 
@@ -194,9 +194,9 @@ def main(cfg: DictConfig):
     recon_loss_key = cfg.experiment.reconstruction_dataset.reconstruction_loss
 
     # NOTE: ReconstructionDataset_Neural is assumed to exist in your codebase
-    recon_dataset = ReconstructionDataset_Neural(
-        reconstruction_data=reconstruction_data,
-        dataloader=base_dataloader,
+    train_recon_dataset = ReconstructionDataset_Neural(
+        reconstruction_data=train_reconstruction_data,
+        dataloader=train_base_dataloader,
         filter_key=filter_key,
         min_error=min_error,
         max_error=max_error,
@@ -207,9 +207,9 @@ def main(cfg: DictConfig):
     num_workers = int(getattr(cfg.experiment.reconstruction_dataset, "num_workers", 4))
 
     # In DDP, DistributedSampler shards the dataset across processes.
-    sampler = (
+    train_sampler = (
         DistributedSampler(
-            recon_dataset,
+            train_recon_dataset,
             num_replicas=get_world_size(),
             rank=get_rank(),
             shuffle=shuffle,
@@ -219,11 +219,56 @@ def main(cfg: DictConfig):
         else None
     )
 
-    recon_dataloader = DataLoader(
-        recon_dataset,
+    train_recon_dataloader = DataLoader(
+        train_recon_dataset,
         batch_size=batch_size,
-        shuffle=(False if sampler is not None else shuffle),
-        sampler=sampler,
+        shuffle=(False if train_sampler is not None else shuffle),
+        sampler=train_sampler,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=(num_workers > 0),
+    )
+
+    # =======================
+    # 3) Load data + DataLoader for test set
+    # =======================
+    # reconstruction_data holds per-image errors for multiple K values + token counts.
+    with open(cfg.experiment.reconstruction_dataset.reconstruction_test_data_path, "r") as f:
+        test_reconstruction_data = json.load(f)
+
+    # This base dataloader supplies images to the ReconstructionDataset implementation.
+    test_base_dataloader = instantiate(cfg.experiment.dataset_val)
+
+    shuffle = bool(cfg.experiment.reconstruction_dataset.shuffle)
+
+    # NOTE: ReconstructionDataset_Neural is assumed to exist in your codebase
+    test_recon_dataset = ReconstructionDataset_Neural(
+        reconstruction_data=test_reconstruction_data,
+        dataloader=test_base_dataloader,
+        filter_key=filter_key,
+        min_error=min_error,
+        max_error=max_error,
+        error_key=recon_loss_key,
+    )
+
+    # In DDP, DistributedSampler shards the dataset across processes.
+    test_sampler = (
+        DistributedSampler(
+            test_recon_dataset,
+            num_replicas=get_world_size(),
+            rank=get_rank(),
+            shuffle=shuffle,
+            drop_last=False,
+        )
+        if dist_is_initialized()
+        else None
+    )
+
+    test_recon_dataloader = DataLoader(
+        test_recon_dataset,
+        batch_size=batch_size,
+        shuffle=(False if test_sampler is not None else shuffle),
+        sampler=test_sampler,
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=(num_workers > 0),
@@ -248,8 +293,8 @@ def main(cfg: DictConfig):
     if is_main_process():
         num_params = sum(p.numel() for p in token_count_predictor.parameters() if p.requires_grad)
         print(f"Number of trainable parameters: {num_params:,}")
-        print("len(recon_dataloader):", len(recon_dataloader))
-        print("len(recon_dataloader.dataset):", len(recon_dataloader.dataset))
+        print("len(recon_dataloader):", len(train_recon_dataloader))
+        print("len(recon_dataloader.dataset):", len(train_recon_dataloader.dataset))
         print("model:\n", token_count_predictor)
 
     lr_backbone = cfg.experiment.optimizer_lr.get("lr_backbone", None)
@@ -270,12 +315,8 @@ def main(cfg: DictConfig):
     )
 
     # training_loss:
-    #  - classification: Gaussian-soft cross-entropy (expects counts in [1..C])
-    #  - regression: e.g., L1/L2 on scaled target y in [0, 1]
+    #  - classification: Gaussian-soft cross-entropy 
     training_loss = instantiate(cfg.experiment.training.loss_training)
-
-    # mae_loss returns a scalar batch-mean MAE (your MAELoss implementation)
-    mae_loss = instantiate(cfg.experiment.training.loss_analysis)
 
     is_reg = (getattr(cfg.experiment.model, "head", "classification") == "regression")
     num_classes = int(getattr(cfg.experiment.model, "num_classes", 256))
@@ -319,21 +360,20 @@ def main(cfg: DictConfig):
     token_count_predictor.train()
 
     # Global step for W&B batch logging
-    global_step = start_epoch * len(recon_dataloader)
+    global_step = start_epoch * len(train_recon_dataloader)
 
     for epoch in range(start_epoch, num_epochs):
         # Ensure distinct shuffling across processes each epoch
-        if isinstance(recon_dataloader.sampler, DistributedSampler):
-            recon_dataloader.sampler.set_epoch(epoch)
+        if isinstance(train_recon_dataloader.sampler, DistributedSampler):
+            train_recon_dataloader.sampler.set_epoch(epoch)
 
         # ---- Sample-weighted epoch accumulators (DDP-friendly) ----
         # We accumulate sums over samples, then divide by total sample count.
         epoch_train_loss_sum = 0.0     # sum over samples of training loss
-        epoch_mae_sum = 0.0            # sum over samples of |E[count]-true|
         epoch_hard_nll_sum = 0.0       # sum over samples of -log p(true_class)
         epoch_count = 0                # number of samples processed
 
-        for b_idx, batch in enumerate(recon_dataloader):
+        for b_idx, batch in enumerate(train_recon_dataloader):
             images = batch["image"].to(device, non_blocking=True).float()
 
             # recon_loss is a model input feature (not the target)
@@ -349,51 +389,23 @@ def main(cfg: DictConfig):
             # Forward:
             #  - classification: logits [B, C]
             #  - regression: pred_y [B, 1] in [0,1] (or unclamped, depending on head)
-            out = token_count_predictor(images, recon_loss)
+            token_count_prediction = token_count_predictor(images, recon_loss)
+            
+            # -----------------------------
+            # CLASSIFICATION HEAD (counts 1..C)
+            # -----------------------------
+            logits = token_count_prediction  # [B, C]
 
-            if is_reg:
-                # -----------------------------
-                # REGRESSION HEAD
-                # -----------------------------
-                # Scale target to [0,1]: y = (K-1)/(C-1)
-                y = (k_value - 1.0) / float(num_classes - 1)  # [B,1]
+            # 1) Training loss: Gaussian-soft cross-entropy with targets centered at true count
+            loss = training_loss(logits, k_value)  # scalar batch mean
 
-                # Training loss in regression space (e.g., L1/L2 on y)
-                loss = training_loss(out, y)
 
-                # Analysis metric: MAE in original count space
-                # Convert predicted y -> predicted K in [1..C]
-                pred_y = out.clamp(0.0, 1.0)  # [B,1]
-                pred_k = (pred_y * (num_classes - 1) + 1.0)  # [B,1]
-                mae_expected = mae_loss(pred_k, k_value)     # scalar batch mean
-
-                # Hard-NLL is not meaningful for pure regression unless you define a likelihood model.
-                # We log NaN for consistency.
-                hard_nll_mean = torch.tensor(float("nan"), device=device)
-
-            else:
-                # -----------------------------
-                # CLASSIFICATION HEAD (counts 1..C)
-                # -----------------------------
-                logits = out  # [B, C]
-
-                # 1) Training loss: Gaussian-soft cross-entropy with targets centered at true count
-                loss = training_loss(logits, k_value)  # scalar batch mean
-
-                # 2) Analysis metric: expected-count MAE
-                prob = torch.softmax(logits, dim=1)  # [B,C]
-                classes = torch.arange(
-                    1, num_classes + 1, device=logits.device, dtype=prob.dtype
-                ).unsqueeze(0)  # [1,C]
-                expected_count = (prob * classes).sum(dim=1, keepdim=True)  # [B,1]
-                mae_expected = mae_loss(expected_count, k_value)  # scalar batch mean
-
-                # 3) Diagnostic metric: hard NLL of the true class only
-                #    hard_nll = -log p(true_class)
-                log_p = F.log_softmax(logits, dim=1)  # [B,C]
-                idx = (k_int - 1).clamp(0, num_classes - 1).view(-1, 1)  # [B,1]
-                hard_nll = -log_p.gather(1, idx).squeeze(1)  # [B]
-                hard_nll_mean = hard_nll.mean()              # scalar batch mean
+            # 3) Diagnostic metric: hard NLL of the true class only
+            #    hard_nll = -log p(true_class)
+            log_p = F.log_softmax(logits, dim=1)  # [B,C]
+            idx = (k_int - 1).clamp(0, num_classes - 1).view(-1, 1)  # [B,1]
+            hard_nll = -log_p.gather(1, idx).squeeze(1)  # [B]
+            hard_nll_mean = hard_nll.mean()              # scalar batch mean
 
             # Backprop + update (per batch optimization step)
             loss.backward()
@@ -407,9 +419,6 @@ def main(cfg: DictConfig):
 
             # training loss is a batch mean -> convert to sum over samples
             epoch_train_loss_sum += float(loss.item()) * bs
-
-            # mae_expected is a batch mean -> convert to sum over samples
-            epoch_mae_sum += float(mae_expected.item()) * bs
 
             # hard_nll_mean is a batch mean (classification) -> sum over samples
             # For regression we stored NaN; skip accumulation in that case.
@@ -425,7 +434,6 @@ def main(cfg: DictConfig):
                     wandb.log(
                         {
                             "train/batch_loss": float(loss.item()),
-                            "train/batch_mae_expected": float(mae_expected.item()),
                             "train/batch_hard_nll": (
                                 float(hard_nll_mean.item()) if torch.isfinite(hard_nll_mean) else None
                             ),
@@ -435,7 +443,6 @@ def main(cfg: DictConfig):
                     )
                 print(
                     f"[epoch {epoch+1:03d} | step {global_step:06d}] "
-                    f"loss={loss.item():.6f} mae(E[count])={mae_expected.item():.6f} "
                     f"hard_nll={(hard_nll_mean.item() if torch.isfinite(hard_nll_mean) else float('nan')):.6f}"
                 )
 
@@ -446,18 +453,15 @@ def main(cfg: DictConfig):
         # =======================
         # We reduce SUMs and COUNT across all ranks for true global averages.
         loss_sum = torch.tensor(epoch_train_loss_sum, device=device, dtype=torch.float32)
-        mae_sum = torch.tensor(epoch_mae_sum, device=device, dtype=torch.float32)
         nll_sum = torch.tensor(epoch_hard_nll_sum, device=device, dtype=torch.float32)
         count = torch.tensor(epoch_count, device=device, dtype=torch.float32)
 
         if dist_is_initialized():
             dist.all_reduce(loss_sum, op=dist.ReduceOp.SUM)
-            dist.all_reduce(mae_sum, op=dist.ReduceOp.SUM)
             dist.all_reduce(nll_sum, op=dist.ReduceOp.SUM)
             dist.all_reduce(count, op=dist.ReduceOp.SUM)
 
         avg_loss = (loss_sum / count).item()
-        avg_mae = (mae_sum / count).item()
 
         # If regression mode, nll_sum stayed 0; report NaN for clarity.
         avg_hard_nll = (nll_sum / count).item() if (not is_reg) else float("nan")
@@ -466,20 +470,88 @@ def main(cfg: DictConfig):
             print(
                 f"Epoch {epoch + 1}/{num_epochs} | "
                 f"AvgLoss(train)={avg_loss:.6f} | "
-                f"AvgMAE(E[count])={avg_mae:.6f} | "
                 f"AvgHardNLL={avg_hard_nll:.6f}"
             )
             wandb.log(
                 {
                     "train/epoch_loss": avg_loss,
-                    "train/epoch_mae_expected": avg_mae,
                     "train/epoch_hard_nll": avg_hard_nll,
                     "train/epoch": epoch + 1,
                 }
             )
 
         # =======================
-        # 8) Save checkpoint (rank 0 only)
+        # 8) Validation evaluation (optional; no optimization)
+        # =======================
+        # Switch to eval mode for deterministic behavior in BN/Dropout
+        token_count_predictor.eval()
+
+        val_ce_sum = 0.0
+        val_nll_sum = 0.0
+        val_count = 0
+
+        with torch.no_grad():
+            for v_idx, v_batch in enumerate(test_recon_dataloader):
+                v_images = v_batch["image"].to(device, non_blocking=True).float()
+                v_recon_loss = v_batch[recon_loss_key].to(device, non_blocking=True).float().unsqueeze(1)
+                v_k_value = v_batch["k_value"].to(device, non_blocking=True).float().unsqueeze(1)
+                v_k_int = v_k_value.long().squeeze(1)
+
+                v_out = token_count_predictor(v_images, v_recon_loss)
+
+                bs = int(v_k_value.size(0))
+                val_count += bs
+
+                v_logits = v_out  # [B,C]
+                # Cross-entropy (hard labels)
+                target_idx = (v_k_int - 1).clamp(0, num_classes - 1)
+                ce_mean = F.cross_entropy(v_logits, target_idx, reduction="mean")
+
+                # Hard-NLL for true class
+                v_log_p = F.log_softmax(v_logits, dim=1)
+                v_idx = target_idx.view(-1, 1)
+                v_hard_nll = -v_log_p.gather(1, v_idx).squeeze(1)  # [B]
+                nll_mean = v_hard_nll.mean()
+
+                val_ce_sum += float(ce_mean.item()) * bs
+                val_nll_sum += float(nll_mean.item()) * bs
+
+        # DDP reduction for validation sums
+        val_ce_sum_t = torch.tensor(val_ce_sum, device=device, dtype=torch.float32)
+        val_nll_sum_t = torch.tensor(val_nll_sum, device=device, dtype=torch.float32)
+        val_count_t = torch.tensor(val_count, device=device, dtype=torch.float32)
+
+        if dist_is_initialized():
+            dist.all_reduce(val_ce_sum_t, op=dist.ReduceOp.SUM)
+            dist.all_reduce(val_nll_sum_t, op=dist.ReduceOp.SUM)
+            dist.all_reduce(val_count_t, op=dist.ReduceOp.SUM)
+
+        if not is_reg and val_count_t.item() > 0:
+            avg_val_ce = (val_ce_sum_t / val_count_t).item()
+            avg_val_nll = (val_nll_sum_t / val_count_t).item()
+        else:
+            avg_val_ce = float("nan")
+            avg_val_nll = float("nan")
+
+        if is_main_process():
+            print(
+                f"Validation Epoch {epoch + 1}/{num_epochs} | "
+                f"AvgCrossEntropy(val)={avg_val_ce:.6f} | "
+                f"AvgHardNLL(val)={avg_val_nll:.6f}"
+            )
+            wandb.log(
+                {
+                    "val/cross_entropy": avg_val_ce,
+                    "val/hard_nll": avg_val_nll,
+                    "train/epoch": epoch + 1,
+                }
+            )
+
+        # Return to train mode for next epoch
+        token_count_predictor.train()
+
+        # =======================
+        # 9) Save checkpoint (rank 0 only)
         # =======================
         if is_main_process():
             state_dict = (
