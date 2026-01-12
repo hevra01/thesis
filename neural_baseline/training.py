@@ -252,23 +252,22 @@ def main(cfg: DictConfig):
         print("len(recon_dataloader.dataset):", len(recon_dataloader.dataset))
         print("model:\n", token_count_predictor)
 
-    lr_backbone = cfg.experiment.optimizer.get("lr_backbone", None)
-    lr_head     = cfg.experiment.optimizer.get("lr_head", None)
+    lr_backbone = cfg.experiment.optimizer_lr.get("lr_backbone", None)
+    lr_head     = cfg.experiment.optimizer_lr.get("lr_head", None)
 
     param_groups = build_optimizer_param_groups(
         model=token_count_predictor,
         lr_backbone=lr_backbone,
         lr_head=lr_head,
         backbone_key="backbone",  # adjust if your model uses a different naming
-        head_key="head",
+        head_key="classifier",
     )
 
     optimizer = instantiate(
         cfg.experiment.optimizer,
         params=param_groups,
-)
-
-
+        _convert_="all",
+    )
 
     # training_loss:
     #  - classification: Gaussian-soft cross-entropy (expects counts in [1..C])
