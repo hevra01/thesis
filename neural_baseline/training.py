@@ -494,9 +494,9 @@ def main(cfg: DictConfig):
                     "optimizer_state_dict": optimizer.state_dict(),
                     "loss": avg_loss,
                 },
-                f"{checkpoint_path}_minerr.pt",
+                f"{checkpoint_path}.pt",
             )
-            print(f"Saved checkpoint to: {checkpoint_path}_min343err.pt")
+            print(f"Saved checkpoint to: {checkpoint_path}.pt")
 
 
 

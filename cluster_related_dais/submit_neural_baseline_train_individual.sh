@@ -2,9 +2,9 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-4:00:00
+#SBATCH --time=0-3:00:00
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:h200:4
+#SBATCH --gres=gpu:h200:2
 
 # --- Environment setup ---
 module purge
@@ -69,6 +69,7 @@ ARGS=( experiment=token_estimator_classification_neural_baseline_training_resnet
      experiment.experiment_name="classification_${SIGMA}"
      experiment.group_name="LPIPS_all_finetune_resnet_sigma${SIGMA}"
      experiment.training.loss_training.sigma=${SIGMA}
+     experiment.checkpoint_path="neural_baseline/checkpoint/lpips_${MIN_ERR}"
  )
 
 
