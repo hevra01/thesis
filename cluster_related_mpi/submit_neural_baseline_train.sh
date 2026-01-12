@@ -12,7 +12,7 @@
 
 #SBATCH --partition gpu22             # Partition to submit to (e.g., gpu24 is H100, 80GB VRAM)
 #SBATCH --gres gpu:4                   # Request 4 GPUs on this node (edit as needed)
-#SBATCH --time=0-1:00:00              # Max wall time for the job
+#SBATCH --time=0-8:00:00              # Max wall time for the job
 #SBATCH --nodes 1                      # Single-node multi-GPU
 
 # ---------------- Setup runtime environment ---------------- #
@@ -76,14 +76,18 @@ echo "[RUN] Using LPIPS bin index $JOB_INDEX: min_error=$MIN_ERR, max_error=$MAX
 SIGMA=0.6
 # --- Arguments for Hydra / Python module ---
 # Start with the experiment choice
-ARGS=( experiment=token_estimator_classification_neural_baseline_training_resnet
-     experiment.dataset.split=train
-     experiment.reconstruction_dataset.batch_size=220
+ARGS=( 
+     experiment=token_estimator_classification_neural_baseline_training_resnet
+
+	   experiment.dataset_root="/scratch/inf0/user/mparcham/ILSVRC2012/"
+
+     experiment.reconstruction_dataset.batch_size=200
+
 	   experiment.project_name=neural_baselines_new_lr
-     experiment.reconstruction_dataset.min_error=${MIN_ERR}
-     experiment.reconstruction_dataset.max_error=${MAX_ERR}
-     experiment.experiment_name="classification_${SIGMA}"
-     experiment.group_name="LPIPS_all_finetune_resnet_sigma${SIGMA}"
+     experiment.reconstruction_dataset.filter_key=null
+     experiment.experiment_name="classification_train_val_${SIGMA}"
+     experiment.group_name="mpi_LPIPS_all_finetune_resnet_sigma${SIGMA}"
+
      experiment.training.loss_training.sigma=${SIGMA}
  )
 

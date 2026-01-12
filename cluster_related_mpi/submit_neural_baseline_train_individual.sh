@@ -1,20 +1,36 @@
 #!/bin/bash
-#SBATCH -J neural_baseline_train
-#SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
-#SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-5:00:00
-#SBATCH --nodes=1
-#SBATCH --mem=100000
+# This script is a Slurm job submission script for running a Python script on a cluster.
 
-#SBATCH --gres=gpu:h200:2
 
-# --- Environment setup ---
-module purge
+# ---------------- Slurm job configuration ---------------- #
+# #SBATCH is a directive for Slurm to configure the job.
+# The lines below are Slurm directives that specify job parameters.
+
+#SBATCH --job-name lid_estimations       # Name of the job (shows up in squeue)
+#SBATCH --output logs/output_bpp_100_epoch.txt       # Stdout log file (in logs/ directory) (anything your script prints, like print()) will go to logs/output_<jobid>.txt
+#SBATCH --error logs/error_bpp_100_epoch.txt         # Stderr log file (errors go here) (any errors or exceptions) go to logs/error_<jobid>.txt
+
+#SBATCH --partition gpu22             # Partition to submit to (e.g., gpu24 is H100, 80GB VRAM)
+#SBATCH --gres gpu:4                   # Request 4 GPUs on this node (edit as needed)
+#SBATCH --time=0-5:00:00              # Max wall time for the job
+#SBATCH --nodes 1                      # Single-node multi-GPU
+
+# ---------------- Setup runtime environment ---------------- #
+
+# Ensure shell is properly initialized (for mamba)
 source ~/.bashrc
-source /dais/u/hevrapetek/miniforge3/etc/profile.d/conda.sh
-conda activate thesis_gpu_wheels
-source /dais/u/hevrapetek/thesis_outer/thesis/.wandb_secrets.sh
-cd /dais/u/hevrapetek/thesis_outer/thesis/
+
+# Activate mamba (replace 'myenv' with your actual environment name)
+source /BS/data_mani_compress/work/miniforge3/etc/profile.d/conda.sh
+conda activate dgm_geometry
+
+# Load W&B secrets (make sure this file is secure and not shared)
+source /BS/data_mani_compress/work/thesis/thesis/.wandb_secrets.sh
+
+# ---------------- Run your code ---------------- #
+
+# Move to your working directory (adjust this to where your code lives)
+cd /BS/data_mani_compress/work/thesis/thesis
 
 # Helpful runtime env for performance/stability
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-8}
@@ -58,20 +74,19 @@ MAX_ERR=${MAX_ERRORS[$JOB_INDEX]}
 
 echo "[RUN] Using LPIPS bin index $JOB_INDEX: min_error=$MIN_ERR, max_error=$MAX_ERR"
 SIGMA=0.6
-
 # --- Arguments for Hydra / Python module ---
 # Start with the experiment choice
 ARGS=( 
      experiment=token_estimator_classification_neural_baseline_training_resnet
 
-	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
+	   experiment.dataset_root="/scratch/inf0/user/mparcham/ILSVRC2012/"
 
-     experiment.reconstruction_dataset.batch_size=1024
+     experiment.reconstruction_dataset.batch_size=200
      experiment.reconstruction_dataset.min_error=${MIN_ERR}
      experiment.reconstruction_dataset.max_error=${MAX_ERR}
 
 	   experiment.project_name=neural_baselines_new_lr
-     experiment.group_name="dais_LPIPS_range_finetune_resnet_train_val_sigma_${SIGMA}"
+     experiment.group_name="mpi_LPIPS_range_finetune_resnet_train_val_sigma_${SIGMA}"
      experiment.experiment_name="min_${MIN_ERR}"
 
      experiment.checkpoint_path="neural_baseline/checkpoint/LPIPS/min_${MIN_ERR}.pt"
