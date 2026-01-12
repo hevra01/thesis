@@ -12,7 +12,7 @@
 
 #SBATCH --partition gpu22             # Partition to submit to (e.g., gpu24 is H100, 80GB VRAM)
 #SBATCH --gres gpu:4                   # Request 4 GPUs on this node (edit as needed)
-#SBATCH --time=0-8:00:00              # Max wall time for the job
+#SBATCH --time=0-1:00:00              # Max wall time for the job
 #SBATCH --nodes 1                      # Single-node multi-GPU
 
 # ---------------- Setup runtime environment ---------------- #
@@ -79,10 +79,11 @@ SIGMA=0.6
 ARGS=( experiment=token_estimator_classification_neural_baseline_training_resnet
      experiment.dataset.split=train
      experiment.reconstruction_dataset.batch_size=220
-	   experiment.project_name=neural_baselines
+	   experiment.project_name=neural_baselines_new_lr
      experiment.reconstruction_dataset.min_error=${MIN_ERR}
      experiment.reconstruction_dataset.max_error=${MAX_ERR}
-     experiment.group_name="LPIPS_range_finetune_resnet_sigma=${SIGMA}"
+     experiment.experiment_name="classification_${SIGMA}"
+     experiment.group_name="LPIPS_all_finetune_resnet_sigma${SIGMA}"
      experiment.training.loss_training.sigma=${SIGMA}
  )
 

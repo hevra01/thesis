@@ -1,0 +1,60 @@
+#!/bin/bash
+# This script is a Slurm job submission script for running a Python script on a cluster.
+
+
+# ---------------- Slurm job configuration ---------------- #
+# #SBATCH is a directive for Slurm to configure the job.
+# The lines below are Slurm directives that specify job parameters.
+
+
+
+#SBATCH --job-name dataset_prep_single     # Name of the job (shows up in squeue)
+#SBATCH --output logs/output_prep.txt   # Stdout log file (unique per job)
+#SBATCH --error logs/error_prep.txt     # Stderr log file (unique per job)
+
+#SBATCH --partition gpu22              # Partition to submit to (e.g., gpu24 is H100, 80GB VRAM)
+#SBATCH --gres gpu:1                   # Request 1 GPU
+#SBATCH --mem 64G                      # Amount of RAM to allocate
+#SBATCH --cpus-per-task 4              # Number of CPU cores to allocate
+#SBATCH --time=0-07:00:00              # Max valid value less than 7-00:00:00
+#SBATCH --nodes 1                      # Number of nodes (machines)
+#SBATCH --ntasks 1                     # Number of tasks (normally 1 for single GPU jobs)
+
+# ---------------- Setup runtime environment ---------------- #
+
+# Ensure shell is properly initialized (for mamba)
+source ~/.bashrc
+
+# Activate mamba (replace 'myenv' with your actual environment name)
+source /BS/data_mani_compress/work/miniforge3/etc/profile.d/conda.sh
+conda activate dgm_geometry
+
+
+# ---------------- Run your code ---------------- #
+
+# ----- Configurable via env -----
+EXPERIMENT_NAME=${EXPERIMENT_NAME:-reconstruct_with_tokens}
+
+# Class range chunking
+BASE_START_CLASS=${BASE_START_CLASS:-0}
+CLASSES_PER_JOB=${CLASSES_PER_JOB:-40}
+
+TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
+START_CLASS=$(( BASE_START_CLASS + TASK_ID * CLASSES_PER_JOB ))
+END_CLASS=$(( START_CLASS + CLASSES_PER_JOB ))
+
+echo "Reconstructing classes [$START_CLASS, $END_CLASS) for experiment=$EXPERIMENT_NAME"
+
+ARGS=(
+  experiment=$EXPERIMENT_NAME
+  experiment.start_class_idx=$START_CLASS
+  experiment.end_class_idx=$END_CLASS
+  experiment.perform_apc=true
+  experiment.data_root="/scratch/inf0/user/mparcham/ILSVRC2012/val_categorized"
+  experiment.register_tokens_path="/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz"
+  experiment.output_path="/BS/data_mani_compress/work/thesis/imagenet_reconstructed_APC_true/val_categorized"
+
+
+)
+
+python -u reconstruct_with_tokens.py "${ARGS[@]}"

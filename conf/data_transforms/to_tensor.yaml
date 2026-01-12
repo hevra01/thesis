@@ -1,3 +1,0 @@
-# Converts a PIL Image or NumPy array to a torch.FloatTensor
-# Image shape changes from (H, W, C) → (C, H, W) (channel-first for PyTorch)
-_target_: torchvision.transforms.ToTensor
