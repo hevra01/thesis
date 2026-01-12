@@ -7,6 +7,8 @@ optimizer:
   _target_: torch.optim.Adam
   # global default lr (used if group-specific not provided)
   lr: 0.001
+
+optimizer_lr:
   # optional per-group overrides consumed in training.py
   lr_backbone: 0.00004
   lr_head: 0.0004
