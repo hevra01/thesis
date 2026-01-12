@@ -36,7 +36,7 @@ training:
 # values of k_values and the  bpp.
 reconstruction_dataset:
   reconstruction_train_data_path: "data/datasets/imagenet_reconstruction_losses/train/all_losses.json"
-  reconstruction_test_data_path: "data/datasets/imagenet_reconstruction_losses/test/all_losses.json"
+  reconstruction_test_data_path: "data/datasets/imagenet_reconstruction_losses/val_categorized/all_losses.json"
   batch_size: 180 # this is the batch size for the reconstruction dataset on A40, 4 GPU, 180 batch size is possible
   shuffle: true
   reconstruction_loss: "LPIPS"  # e.g., "mse_error" or "vgg_error"
