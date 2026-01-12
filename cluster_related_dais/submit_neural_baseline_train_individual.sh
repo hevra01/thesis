@@ -74,6 +74,7 @@ ARGS=(
      experiment.group_name="LPIPS_range_finetune_resnet_train_val_sigma_${SIGMA}"
      experiment.experiment_name="min_${MIN_ERR}"
 
+     experiment.checkpoint_path= "neural_baseline/checkpoint/LPIPS/min_${MIN_ERR}"
      experiment.training.loss_training.sigma=${SIGMA}
  )
 

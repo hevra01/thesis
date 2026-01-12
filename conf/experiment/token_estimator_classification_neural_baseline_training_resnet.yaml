@@ -47,7 +47,7 @@ reconstruction_dataset:
 experiment_name: "classification_resnet"
 project_name: neural_baselines_resnet_classification
 group_name: resnet_baseline_experiments
-checkpoint_path: "neural_baseline/checkpoint/LPIPS/"
+checkpoint_path: "neural_baseline/checkpoint/LPIPS/all.pt"
 
 model:
   freeze_backbone: false
