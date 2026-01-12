@@ -5,10 +5,14 @@ defaults:
 
 optimizer:
   _target_: torch.optim.Adam
+  # global default lr (used if group-specific not provided)
   lr: 0.001
+  # optional per-group overrides consumed in training.py
+  lr_backbone: 0.00004
+  lr_head: 0.0004
 
 training:
-    num_epochs: 100
+    num_epochs: 20
     loss_training: 
       _target_: reconstruction_loss.GaussianCrossEntropyLoss
       sigma: 0.2
@@ -23,8 +27,8 @@ reconstruction_dataset:
   shuffle: true
   reconstruction_loss: "LPIPS"  # e.g., "mse_error" or "vgg_error"
   # filter_key: none
-  # min_error: 0.02079272
-  # max_error: 0.12662399
+  min_error: 0.02079272
+  max_error: 0.12662399
 
 experiment_name: "classification_resnet"
 project_name: neural_baselines_resnet_classification

@@ -10,6 +10,7 @@ import wandb
 from data.utils.dataloaders import ReconstructionDataset_Neural
 import json
 from hydra.utils import instantiate
+from typing import Dict, List, Tuple
 
 
 # ------------------------------
@@ -33,6 +34,74 @@ def get_world_size() -> int:
 def is_main_process() -> bool:
     """True only for rank 0 (used to gate logging/checkpointing)."""
     return get_rank() == 0
+
+def build_optimizer_param_groups(
+    model: torch.nn.Module,
+    lr_backbone: float = None,
+    lr_head: float = None,
+    backbone_key: str = "backbone",
+    head_key: str = "classifier",
+) -> List[Dict]:
+    """
+    Build optimizer parameter groups for head/backbone with separate learning rates.
+
+    Args:
+        model: the PyTorch model
+        lr_backbone: learning rate for backbone params (None → ignored)
+        lr_head: learning rate for head params (None → ignored)
+        backbone_key: substring identifying backbone params in name
+        head_key: substring identifying head params in name
+
+    Returns:
+        A list of parameter groups for the optimizer.
+    """
+
+    backbone_params = []
+    head_params     = []
+    other_params    = []
+
+    for name, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+
+        # pick group
+        if backbone_key and backbone_key in name:
+            backbone_params.append(p)
+        elif head_key and head_key in name:
+            head_params.append(p)
+        else:
+            other_params.append(p)
+
+    param_groups = []
+
+    # attach backbone group
+    if lr_backbone is not None and backbone_params:
+        param_groups.append({"params": backbone_params, "lr": lr_backbone})
+
+    # attach head group
+    if lr_head is not None and head_params:
+        param_groups.append({"params": head_params, "lr": lr_head})
+
+    # any leftover params (neither backbone nor head)
+    if other_params:
+        # if no groups defined yet, treat these as default group
+        default_lr = None
+        if lr_backbone is not None and not param_groups:
+            default_lr = lr_backbone
+        if lr_head is not None and not param_groups:
+            default_lr = lr_head
+
+        group = {"params": other_params}
+        if default_lr is not None:
+            group["lr"] = default_lr
+
+        param_groups.append(group)
+
+    # fallback
+    if not param_groups:
+        raise ValueError("No parameters found for optimizer!")
+
+    return param_groups
 
 
 @hydra.main(version_base=None, config_path="../conf", config_name="neural_baseline_training")
@@ -183,10 +252,22 @@ def main(cfg: DictConfig):
         print("len(recon_dataloader.dataset):", len(recon_dataloader.dataset))
         print("model:\n", token_count_predictor)
 
-    optimizer = instantiate(
-    cfg.experiment.optimizer,
-        params=[p for p in token_count_predictor.parameters() if p.requires_grad]
+    lr_backbone = cfg.experiment.optimizer.get("lr_backbone", None)
+    lr_head     = cfg.experiment.optimizer.get("lr_head", None)
+
+    param_groups = build_optimizer_param_groups(
+        model=token_count_predictor,
+        lr_backbone=lr_backbone,
+        lr_head=lr_head,
+        backbone_key="backbone",  # adjust if your model uses a different naming
+        head_key="head",
     )
+
+    optimizer = instantiate(
+        cfg.experiment.optimizer,
+        params=param_groups,
+)
+
 
 
     # training_loss:

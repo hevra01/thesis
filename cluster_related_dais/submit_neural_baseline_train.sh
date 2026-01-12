@@ -4,8 +4,7 @@
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
 #SBATCH --time=0-4:00:00
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:h200:4
-#SBATCH --mem=550000
+#SBATCH --gres=gpu:h200:8
 
 # --- Environment setup ---
 module purge
@@ -63,10 +62,11 @@ SIGMA=0.6
 ARGS=( experiment=token_estimator_classification_neural_baseline_training_resnet
 	   experiment.dataset.root="/dais/fs/scratch/hevrapetek/"
      experiment.dataset.split=train
-     experiment.reconstruction_dataset.batch_size=700
+     experiment.reconstruction_dataset.batch_size=1024
 	   experiment.project_name=neural_baselines
      experiment.reconstruction_dataset.min_error=${MIN_ERR}
      experiment.reconstruction_dataset.max_error=${MAX_ERR}
+     experiment.experiment_name="classification_${SIGMA}"
      experiment.group_name="LPIPS_all_finetune_resnet_sigma=${SIGMA}"
      experiment.training.loss_training.sigma=${SIGMA}
  )
