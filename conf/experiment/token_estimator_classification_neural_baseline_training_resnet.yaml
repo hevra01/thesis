@@ -2,15 +2,21 @@ defaults:
   - /model: resnet_fine_tune
   - /dataset: imageNet
 
+# different experiments might use different splits of the data
+dataset:
+  transform_profile: "imagenet"  # 224 when using clip, 256 when using resnet
+
 dataset_train:
   _target_: ${dataset._target_}
   root: ${dataset.root}
   split: train
+  train_or_eval: "train"
 
 dataset_val:
   _target_: ${dataset._target_}
   root: ${dataset.root}
   split: val_categorized
+  train_or_eval: "eval"
 
 optimizer:
   _target_: torch.optim.Adam
@@ -44,13 +50,6 @@ experiment_name: "classification_resnet"
 project_name: neural_baselines_resnet_classification
 group_name: resnet_baseline_experiments
 checkpoint_path: "neural_baseline/checkpoint/LPIPS/"
-
-
-# different experiments might use different splits of the data
-dataset:
-  split: "val_categorized"
-  transform_profile: "imagenet"  # 224 when using clip, 256 when using resnet
-
 
 model:
   freeze_backbone: false
