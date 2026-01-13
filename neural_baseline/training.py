@@ -568,7 +568,7 @@ def main(cfg: DictConfig):
                 },
                 f"{checkpoint_path}.pt",
             )
-            print(f"Saved checkpoint to: {checkpoint_path}.pt")
+            print(f"Saved checkpoint to: {checkpoint_path}")
 
 
 
