@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 
-class ResNetCondClassifier(nn.Module):
+class ResNetCond(nn.Module):
     def __init__(
         self,
         num_classes: int,
@@ -11,6 +11,7 @@ class ResNetCondClassifier(nn.Module):
         use_condition: bool = True,
         freeze_backbone: bool = False,
         keep_backbone_eval: bool = True,
+        task: str = "classification",
     ):
         super().__init__()
         weights = "IMAGENET1K_V2" if pretrained else None
@@ -40,7 +41,13 @@ class ResNetCondClassifier(nn.Module):
             ) if use_condition else None
         )
 
-        self.classifier = nn.Linear(in_dim + cond_dim, num_classes)
+        # the head is either for regression or classification
+        if task == "regression":
+            self.head = nn.Linear(in_dim + cond_dim, 1)
+        elif task == "classification":  # classification
+            self.head = nn.Linear(in_dim + cond_dim, num_classes)
+        else:
+            raise ValueError(f"Unknown task: {task}")
 
     def forward(self, x, recon_loss_scalar=None):
         # Ensure backbone stays in eval during training if frozen
@@ -55,9 +62,9 @@ class ResNetCondClassifier(nn.Module):
             l = torch.log(l + 1e-8)
             c = self.cond_mlp(l)
             z = torch.cat([f, c], dim=1)
-            return self.classifier(z)
+            return self.head(z)
         else:
-            return self.classifier(f)
+            return self.head(f)
 
     def train(self, mode: bool = True):
         """Override to keep frozen backbone in eval when training.
@@ -77,7 +84,7 @@ class ResNetCondClassifier(nn.Module):
         Includes `classifier` and, if enabled, `cond_mlp`.
         Useful for constructing an optimizer that excludes the frozen backbone.
         """
-        params = list(self.classifier.parameters())
+        params = list(self.head.parameters())
         if self.use_condition and self.cond_mlp is not None:
             params += list(self.cond_mlp.parameters())
         return params

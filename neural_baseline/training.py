@@ -35,6 +35,21 @@ def is_main_process() -> bool:
     """True only for rank 0 (used to gate logging/checkpointing)."""
     return get_rank() == 0
 
+def setup_distributed_and_device():
+    """Setup distributed process group (if launched with torchrun) and return device + local rank."""
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+
+    if ("RANK" in os.environ) and ("WORLD_SIZE" in os.environ) and not dist_is_initialized():
+        backend = "nccl" if torch.cuda.is_available() else "gloo"
+        dist.init_process_group(backend=backend, init_method="env://")
+    
+    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+    torch.backends.cudnn.benchmark = True
+    return device, local_rank
+
 def build_optimizer_param_groups(
     model: torch.nn.Module,
     lr_backbone: float = None,
@@ -103,28 +118,7 @@ def build_optimizer_param_groups(
 
     return param_groups
 
-
-@hydra.main(version_base=None, config_path="../conf", config_name="neural_baseline_training")
-def main(cfg: DictConfig):
-    # =====================================
-    # 1) Device + Distributed Initialization
-    # =====================================
-    # If launched with torchrun, these env vars exist.
-    local_rank = int(os.environ.get("LOCAL_RANK", 0))
-
-    if torch.cuda.is_available():
-        torch.cuda.set_device(local_rank)
-
-    # Initialize process group if torchrun env vars are present
-    if ("RANK" in os.environ) and ("WORLD_SIZE" in os.environ) and not dist_is_initialized():
-        dist.init_process_group(backend="nccl", init_method="env://")
-
-    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else cfg.device)
-    torch.backends.cudnn.benchmark = True
-
-    # =======================
-    # 2) Initialize Weights&Biases
-    # =======================
+def init_wandb_if_main(cfg):
     if is_main_process():
         run = wandb.init(
             name=cfg.experiment.experiment_name,
@@ -134,7 +128,7 @@ def main(cfg: DictConfig):
         )
         wandb.run.summary["run_id"] = run.id
 
-    # Log runtime / DDP info (rank 0 only)
+def log_runtime_ddp_info(device, local_rank):
     if is_main_process():
         try:
             num_visible = torch.cuda.device_count() if torch.cuda.is_available() else 0
@@ -171,17 +165,11 @@ def main(cfg: DictConfig):
         except Exception as e:
             print(f"[DDP] Failed to gather/log runtime info: {e}")
 
-    # =======================
-    # 3) Load data + DataLoader for train set
-    # =======================
-    # reconstruction_data holds per-image errors for multiple K values + token counts.
-    with open(cfg.experiment.reconstruction_dataset.reconstruction_train_data_path, "r") as f:
-        train_reconstruction_data = json.load(f)
 
-    # This base dataloader supplies images to the ReconstructionDataset implementation.
-    train_base_dataloader = instantiate(cfg.experiment.dataset_train)
-
-    shuffle = bool(cfg.experiment.reconstruction_dataset.shuffle)
+def build_recon_dataloader(cfg, reconstruction_path, base_loader_cfg, split="train"):
+    """
+    Build a DataLoader for the reconstruction dataset.
+    """
 
     # Optional filtering to constrain error range
     filter_key = getattr(cfg.experiment.reconstruction_dataset, "filter_key", None)
@@ -193,10 +181,21 @@ def main(cfg: DictConfig):
 
     recon_loss_key = cfg.experiment.reconstruction_dataset.reconstruction_loss
 
-    # NOTE: ReconstructionDataset_Neural is assumed to exist in your codebase
-    train_recon_dataset = ReconstructionDataset_Neural(
-        reconstruction_data=train_reconstruction_data,
-        dataloader=train_base_dataloader,
+    # reconstruction_data holds per-image errors for multiple K values + token counts.
+    with open(reconstruction_path, "r") as f:
+        reconstruction_data = json.load(f)
+
+    # This base dataloader supplies images to the ReconstructionDataset implementation.
+    base_dataloader = instantiate(base_loader_cfg)
+
+    # for evaluation, we typically do not want to shuffle for the sake of reproducibility
+    shuffle = bool(cfg.experiment.reconstruction_dataset.shuffle_train) if (split=="train") else bool(cfg.experiment.reconstruction_dataset.shuffle_eval)
+
+    # reconstruction_data (list): List of dicts containing reconstruction metrics.
+    # (img, k_value, mse_error, vgg_error).
+    recon_dataset = ReconstructionDataset_Neural(
+        reconstruction_data=reconstruction_data,
+        dataloader=base_dataloader,
         filter_key=filter_key,
         min_error=min_error,
         max_error=max_error,
@@ -207,9 +206,9 @@ def main(cfg: DictConfig):
     num_workers = int(getattr(cfg.experiment.reconstruction_dataset, "num_workers", 4))
 
     # In DDP, DistributedSampler shards the dataset across processes.
-    train_sampler = (
+    sampler = (
         DistributedSampler(
-            train_recon_dataset,
+            recon_dataset,
             num_replicas=get_world_size(),
             rank=get_rank(),
             shuffle=shuffle,
@@ -219,61 +218,49 @@ def main(cfg: DictConfig):
         else None
     )
 
-    train_recon_dataloader = DataLoader(
-        train_recon_dataset,
+    recon_dataloader = DataLoader(
+        recon_dataset,
         batch_size=batch_size,
-        shuffle=(False if train_sampler is not None else shuffle),
-        sampler=train_sampler,
+        shuffle=(False if sampler is not None else shuffle),
+        sampler=sampler,
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=(num_workers > 0),
     )
 
+    return recon_dataloader
+
+@hydra.main(version_base=None, config_path="../conf", config_name="neural_baseline_training")
+def main(cfg: DictConfig):
+    # =====================================
+    # 1) Device + Distributed Initialization
+    # =====================================
+    device, local_rank = setup_distributed_and_device()
+
     # =======================
-    # 3) Load data + DataLoader for test set
+    # 2) Initialize Weights&Biases
     # =======================
-    # reconstruction_data holds per-image errors for multiple K values + token counts.
-    with open(cfg.experiment.reconstruction_dataset.reconstruction_test_data_path, "r") as f:
-        test_reconstruction_data = json.load(f)
+    init_wandb_if_main(cfg)
 
-    # This base dataloader supplies images to the ReconstructionDataset implementation.
-    test_base_dataloader = instantiate(cfg.experiment.dataset_val)
+    # Log runtime / DDP info (rank 0 only)
+    log_runtime_ddp_info(device, local_rank)
 
-    shuffle = bool(cfg.experiment.reconstruction_dataset.shuffle)
-
-    # NOTE: ReconstructionDataset_Neural is assumed to exist in your codebase
-    test_recon_dataset = ReconstructionDataset_Neural(
-        reconstruction_data=test_reconstruction_data,
-        dataloader=test_base_dataloader,
-        filter_key=filter_key,
-        min_error=min_error,
-        max_error=max_error,
-        error_key=recon_loss_key,
+    # 3) DataLoader for train set
+    train_recon_dataloader = build_recon_dataloader(
+        cfg,
+        reconstruction_path=cfg.experiment.reconstruction_dataset.reconstruction_train_data_path,
+        base_loader_cfg=cfg.experiment.dataset_train,
+        split="train"
     )
 
-    # In DDP, DistributedSampler shards the dataset across processes.
-    test_sampler = (
-        DistributedSampler(
-            test_recon_dataset,
-            num_replicas=get_world_size(),
-            rank=get_rank(),
-            shuffle=shuffle,
-            drop_last=False,
-        )
-        if dist_is_initialized()
-        else None
+    # 4) DataLoader for test set
+    test_recon_dataloader = build_recon_dataloader(
+        cfg,
+        reconstruction_path=cfg.experiment.reconstruction_dataset.reconstruction_test_data_path,
+        base_loader_cfg=cfg.experiment.dataset_val,
+        split="eval"
     )
-
-    test_recon_dataloader = DataLoader(
-        test_recon_dataset,
-        batch_size=batch_size,
-        shuffle=(False if test_sampler is not None else shuffle),
-        sampler=test_sampler,
-        num_workers=num_workers,
-        pin_memory=True,
-        persistent_workers=(num_workers > 0),
-    )
-
+    
     # =======================
     # 4) Model, optimizer, losses
     # =======================
@@ -463,9 +450,7 @@ def main(cfg: DictConfig):
 
         avg_loss = (loss_sum / count).item()
 
-        # If regression mode, nll_sum stayed 0; report NaN for clarity.
-        avg_hard_nll = (nll_sum / count).item() if (not is_reg) else float("nan")
-
+        avg_hard_nll = (nll_sum / count).item()
         if is_main_process():
             print(
                 f"Epoch {epoch + 1}/{num_epochs} | "

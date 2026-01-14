@@ -1,4 +1,4 @@
-_target_: models.resnet.ResNetCondClassifier
+_target_: models.resnet.ResNetCond
 
 # Number of classes for the classifier.
 # Set to 1000 for ImageNet; adjust as needed.
@@ -18,3 +18,5 @@ freeze_backbone: true
 # Keep the frozen backbone in eval mode to avoid BatchNorm running-stat updates.
 keep_backbone_eval: true
 
+# choose task as classification or regression
+task: "classification"
