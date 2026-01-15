@@ -52,71 +52,36 @@ def setup_distributed_and_device():
 
 def build_optimizer_param_groups(
     model: torch.nn.Module,
-    lr_backbone: float = None,
-    lr_head: float = None,
-    backbone_key: str = "backbone",
-    head_key: str = "classifier",
+    lr_backbone: float,
+    lr_head: float,
 ) -> List[Dict]:
-    """
-    Build optimizer parameter groups for head/backbone with separate learning rates.
-
-    Args:
-        model: the PyTorch model
-        lr_backbone: learning rate for backbone params (None → ignored)
-        lr_head: learning rate for head params (None → ignored)
-        backbone_key: substring identifying backbone params in name
-        head_key: substring identifying head params in name
-
-    Returns:
-        A list of parameter groups for the optimizer.
-    """
+    if lr_backbone is None or lr_head is None:
+        raise ValueError("Both lr_backbone and lr_head must be provided.")
 
     backbone_params = []
-    head_params     = []
-    other_params    = []
+    head_like_params = []  # head + cond_mlp
 
     for name, p in model.named_parameters():
         if not p.requires_grad:
             continue
 
-        # pick group
-        if backbone_key and backbone_key in name:
+        if name.startswith("backbone."):
             backbone_params.append(p)
-        elif head_key and head_key in name:
-            head_params.append(p)
+        elif name.startswith("head.") or name.startswith("cond_mlp."):
+            head_like_params.append(p)
         else:
-            other_params.append(p)
+            # If you later add more modules, decide what to do with them.
+            raise ValueError(f"Unrecognized trainable parameter: {name}")
 
-    param_groups = []
+    if not backbone_params:
+        raise ValueError("No backbone parameters found (expected names starting with 'backbone.').")
+    if not head_like_params:
+        raise ValueError("No head/cond_mlp parameters found (expected 'head.' or 'cond_mlp.').")
 
-    # attach backbone group
-    if lr_backbone is not None and backbone_params:
-        param_groups.append({"params": backbone_params, "lr": lr_backbone})
-
-    # attach head group
-    if lr_head is not None and head_params:
-        param_groups.append({"params": head_params, "lr": lr_head})
-
-    # any leftover params (neither backbone nor head)
-    if other_params:
-        # if no groups defined yet, treat these as default group
-        default_lr = None
-        if lr_backbone is not None and not param_groups:
-            default_lr = lr_backbone
-        if lr_head is not None and not param_groups:
-            default_lr = lr_head
-
-        group = {"params": other_params}
-        if default_lr is not None:
-            group["lr"] = default_lr
-
-        param_groups.append(group)
-
-    # fallback
-    if not param_groups:
-        raise ValueError("No parameters found for optimizer!")
-
-    return param_groups
+    return [
+        {"params": backbone_params, "lr": lr_backbone},
+        {"params": head_like_params, "lr": lr_head},
+    ]
 
 def init_wandb_if_main(cfg):
     if is_main_process():
@@ -161,7 +126,7 @@ def log_runtime_ddp_info(device, local_rank):
                     "version": torch.__version__,
                 },
             }
-            wandb.config.update(ddp_info)
+            wandb.config.update(ddp_info, allow_val_change=True)
         except Exception as e:
             print(f"[DDP] Failed to gather/log runtime info: {e}")
 
@@ -230,6 +195,186 @@ def build_recon_dataloader(cfg, reconstruction_path, base_loader_cfg, split="tra
 
     return recon_dataloader
 
+
+def load_checkpoint_if_exists(ckp_path, model, optimizer, device):
+    """
+    Load model and optimizer state from a checkpoint file if it exists.
+    """
+   # Create directory if checkpoint path includes one
+    ckpt_dir = os.path.dirname(ckp_path)
+    if ckpt_dir:
+        os.makedirs(ckpt_dir, exist_ok=True)
+
+    start_epoch = 0
+    last_loss = None
+
+    if os.path.isfile(ckp_path):
+        if is_main_process():
+            print(f"Found checkpoint at {ckp_path}. Loading and resuming...")
+        ckpt = torch.load(ckp_path, map_location=device)
+
+        # Load weights (DDP wraps module)
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            model.module.load_state_dict(ckpt["model_state_dict"])
+        else:
+            model.load_state_dict(ckpt["model_state_dict"])
+
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        start_epoch = int(ckpt.get("epoch", 0))
+        last_loss = ckpt.get("loss", None)
+
+        if is_main_process():
+            if last_loss is not None:
+                print(f"Resuming from epoch {start_epoch} with last avg loss = {last_loss:.6f}")
+            else:
+                print(f"Resuming from epoch {start_epoch}")
+    else:
+        if is_main_process():
+            print("No checkpoint found. Starting from epoch 0.")
+
+    return start_epoch, last_loss
+
+
+def save_checkpoint(path, epoch_next, model, optimizer, avg_loss):
+    if not is_main_process():
+        return
+    target = model.module if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model
+    torch.save(
+        {
+            "epoch": epoch_next,
+            "model_state_dict": target.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "loss": avg_loss,
+        },
+        path,
+    )
+
+def train_one_epoch(model, loader, optimizer, training_loss, device, recon_loss_key, num_classes, epoch, global_step):
+    model.train()
+
+    # we will accumulate the total loss for each epoch. the accumulated total loss is composed of a sum of the losses over all samples
+    # that each gpu has seen.
+    loss_sum = 0.0
+    nll_sum = 0.0
+    count = 0 # this count is the number of samples seen by each GPU. would've been equal to the dataset size if not for DDP sharding.
+
+    # to mix up the data each epoch in DDP, we need to set the epoch for the DistributedSampler
+    # this ensures that each process gets a different shard of the data each epoch.
+    # which prevents overfitting to a specific data order.
+    if isinstance(loader.sampler, DistributedSampler):
+        loader.sampler.set_epoch(epoch)
+
+    for batch in loader:
+        images = batch["image"].to(device, non_blocking=True).float()
+
+        # recon_loss is a model input feature (not the target)
+        recon_loss = batch[recon_loss_key].to(device, non_blocking=True).float().unsqueeze(1)
+
+        # k_value is the target token count in [1..C]
+        # keep float for Gaussian-soft CE; also keep an int version for indexing
+        k_value = batch["k_value"].to(device, non_blocking=True).float().unsqueeze(1)  # [B,1]
+        k_int = k_value.long().squeeze(1)  # [B], values in [1..C]
+
+        optimizer.zero_grad(set_to_none=True)
+
+        # Forward:
+        #  - classification: logits [B, C]
+        #  - regression: pred_y [B, 1] in [0,1] (or unclamped, depending on head)
+        token_count_prediction = model(images, recon_loss)
+        
+        # -----------------------------
+        # CLASSIFICATION HEAD (counts 1..C)
+        # -----------------------------
+        logits = token_count_prediction  # [B, C]
+
+        # 1) Training loss: Gaussian-soft cross-entropy with targets centered at true count
+        loss = training_loss(logits, k_value)  # scalar batch mean
+
+        # 3) Diagnostic metric: hard NLL of the true class only
+        #    hard_nll = -log p(true_class)
+        log_p = F.log_softmax(logits, dim=1)  # [B,C]
+        idx = (k_int - 1).clamp(0, num_classes - 1).view(-1, 1)  # [B,1]
+        hard_nll = -log_p.gather(1, idx).squeeze(1)  # [B]
+        hard_nll_mean = hard_nll.mean()              # scalar batch mean
+
+        # Backprop + update (per batch optimization step)
+        loss.backward()
+        optimizer.step()
+
+        # -----------------------------
+        # Accumulate sample-weighted sums
+        # -----------------------------
+        bs = int(k_value.size(0))
+        count += bs
+
+        # training loss is a batch mean -> convert to sum over samples
+        loss_sum += float(loss.item()) * bs
+
+        nll_sum += float(hard_nll_mean.item()) * bs
+
+        if is_main_process() and global_step % 50 == 0:
+            wandb.log({"train/batch_loss": float(loss.item()), "train/batch_hard_nll": float(hard_nll_mean.item())}, step=global_step)
+        global_step += 1
+
+    return {"main_sum": loss_sum, "nll_sum": nll_sum, "count": count, "global_step": global_step}
+
+def ddp_reduce_epoch_metrics(metrics, device):
+    main_sum = torch.tensor(metrics["main_sum"], device=device, dtype=torch.float32)
+    nll_sum  = torch.tensor(metrics["nll_sum"],  device=device, dtype=torch.float32)
+    count    = torch.tensor(metrics["count"],    device=device, dtype=torch.float32)
+
+    if dist_is_initialized():
+        dist.all_reduce(main_sum, op=dist.ReduceOp.SUM)
+        dist.all_reduce(nll_sum,  op=dist.ReduceOp.SUM)
+        dist.all_reduce(count,    op=dist.ReduceOp.SUM)
+
+    avg_main = (main_sum / count).item() if count.item() > 0 else float("nan")
+    avg_nll  = (nll_sum  / count).item() if count.item() > 0 else float("nan")
+    return {"avg_main": avg_main, "avg_nll": avg_nll, "count": count.item()}
+
+def validate_one_epoch(model, dataloader, device, recon_loss_key, num_classes):
+    """
+    Runs validation for one epoch.
+
+    Returns a dict with SUMs and COUNT (DDP-friendly):
+      - ce_sum: sum of CE over samples
+      - nll_sum: sum of hard NLL over samples
+      - count: number of samples
+    """
+    model.eval()
+
+    ce_sum = 0.0
+    nll_sum = 0.0
+    count = 0
+
+    with torch.no_grad():
+        for batch in dataloader:
+            images = batch["image"].to(device, non_blocking=True).float()
+            recon_loss = batch[recon_loss_key].to(device, non_blocking=True).float().unsqueeze(1)
+            k_value = batch["k_value"].to(device, non_blocking=True).float().unsqueeze(1)
+            k_int = k_value.long().squeeze(1)  # for indexing/classes
+
+            logits = model(images, recon_loss)  # [B, C]
+
+            # target indices must be long in [0..C-1]
+            C = logits.size(1)
+            target_idx = (k_int - 1).clamp(0, C - 1)
+
+            # CE mean over batch -> convert to sum over samples
+            ce_mean = F.cross_entropy(logits, target_idx, reduction="mean")
+
+            # hard NLL mean over batch -> convert to sum over samples
+            log_p = F.log_softmax(logits, dim=1)
+            idx = target_idx.view(-1, 1)
+            hard_nll_mean = (-log_p.gather(1, idx).squeeze(1)).mean()
+
+            bs = int(images.size(0))
+            count += bs
+            ce_sum += float(ce_mean.item()) * bs
+            nll_sum += float(hard_nll_mean.item()) * bs
+
+    return {"main_sum": ce_sum, "nll_sum": nll_sum, "count": count}
+
 @hydra.main(version_base=None, config_path="../conf", config_name="neural_baseline_training")
 def main(cfg: DictConfig):
     # =====================================
@@ -264,8 +409,8 @@ def main(cfg: DictConfig):
     # =======================
     # 4) Model, optimizer, losses
     # =======================
-    # Classification head: model outputs logits [B, C] (counts 1..C)
-    # Regression head: model outputs scalar [B, 1] (scaled target in [0, 1])
+    # Classification head for predicting token counts: model outputs logits [B, C] (counts 1..C)
+    # Regression head for predicting reconstruction loss: model outputs scalar [B, 1] 
     token_count_predictor = instantiate(cfg.experiment.model).to(device)
 
     if dist_is_initialized():
@@ -284,15 +429,15 @@ def main(cfg: DictConfig):
         print("len(recon_dataloader.dataset):", len(train_recon_dataloader.dataset))
         print("model:\n", token_count_predictor)
 
+    # while fine-tuning resnet, we typically use a lower learning rate for the backbone.
+    # hence, we explicitly build parameter groups.
     lr_backbone = cfg.experiment.optimizer_lr.get("lr_backbone", None)
     lr_head     = cfg.experiment.optimizer_lr.get("lr_head", None)
 
     param_groups = build_optimizer_param_groups(
-        model=token_count_predictor,
+        model=token_count_predictor.module if isinstance(token_count_predictor, torch.nn.parallel.DistributedDataParallel) else token_count_predictor,
         lr_backbone=lr_backbone,
-        lr_head=lr_head,
-        backbone_key="backbone",  # adjust if your model uses a different naming
-        head_key="classifier",
+        lr_head=lr_head
     )
 
     optimizer = instantiate(
@@ -302,43 +447,16 @@ def main(cfg: DictConfig):
     )
 
     # training_loss:
-    #  - classification: Gaussian-soft cross-entropy 
+    #  - classification: Gaussian-soft cross-entropy between token classes
+    #  - regression: L1 loss
     training_loss = instantiate(cfg.experiment.training.loss_training)
+    recon_loss_key = cfg.experiment.reconstruction_dataset.reconstruction_loss
 
     is_reg = (getattr(cfg.experiment.model, "head", "classification") == "regression")
     num_classes = int(getattr(cfg.experiment.model, "num_classes", 256))
 
-    # =======================
-    # 5) Resume checkpoint (single file)
-    # =======================
-    checkpoint_path = cfg.experiment.checkpoint_path
-    # create directory if it doesn't exist
-    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
-    start_epoch = 0
-
-    if os.path.isfile(checkpoint_path):
-        if is_main_process():
-            print(f"Found checkpoint at {checkpoint_path}. Loading and resuming...")
-        ckpt = torch.load(checkpoint_path, map_location=device)
-
-        # Load weights (DDP wraps module)
-        if isinstance(token_count_predictor, torch.nn.parallel.DistributedDataParallel):
-            token_count_predictor.module.load_state_dict(ckpt["model_state_dict"])
-        else:
-            token_count_predictor.load_state_dict(ckpt["model_state_dict"])
-
-        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
-        start_epoch = int(ckpt.get("epoch", 0))
-        last_loss = ckpt.get("loss", None)
-
-        if is_main_process():
-            if last_loss is not None:
-                print(f"Resuming from epoch {start_epoch} with last avg loss = {last_loss:.6f}")
-            else:
-                print(f"Resuming from epoch {start_epoch}")
-    else:
-        if is_main_process():
-            print("No checkpoint found. Starting from epoch 0.")
+    # 5) Resume checkpoint if it exists
+    start_epoch, _ = load_checkpoint_if_exists(cfg.experiment.checkpoint_path, token_count_predictor, optimizer, device)
 
     # =======================
     # 6) Training loop
@@ -350,211 +468,31 @@ def main(cfg: DictConfig):
     global_step = start_epoch * len(train_recon_dataloader)
 
     for epoch in range(start_epoch, num_epochs):
-        # Ensure distinct shuffling across processes each epoch
-        if isinstance(train_recon_dataloader.sampler, DistributedSampler):
-            train_recon_dataloader.sampler.set_epoch(epoch)
+        train_metrics = train_one_epoch(token_count_predictor, train_recon_dataloader, optimizer, training_loss, device, recon_loss_key, num_classes, epoch, global_step)
 
-        # ---- Sample-weighted epoch accumulators (DDP-friendly) ----
-        # We accumulate sums over samples, then divide by total sample count.
-        epoch_train_loss_sum = 0.0     # sum over samples of training loss
-        epoch_hard_nll_sum = 0.0       # sum over samples of -log p(true_class)
-        epoch_count = 0                # number of samples processed
+        global_step = train_metrics["global_step"]
 
-        for b_idx, batch in enumerate(train_recon_dataloader):
-            images = batch["image"].to(device, non_blocking=True).float()
-
-            # recon_loss is a model input feature (not the target)
-            recon_loss = batch[recon_loss_key].to(device, non_blocking=True).float().unsqueeze(1)
-
-            # k_value is the target token count in [1..C]
-            # keep float for Gaussian-soft CE; also keep an int version for indexing
-            k_value = batch["k_value"].to(device, non_blocking=True).float().unsqueeze(1)  # [B,1]
-            k_int = k_value.long().squeeze(1)  # [B], values in [1..C]
-
-            optimizer.zero_grad(set_to_none=True)
-
-            # Forward:
-            #  - classification: logits [B, C]
-            #  - regression: pred_y [B, 1] in [0,1] (or unclamped, depending on head)
-            token_count_prediction = token_count_predictor(images, recon_loss)
-            
-            # -----------------------------
-            # CLASSIFICATION HEAD (counts 1..C)
-            # -----------------------------
-            logits = token_count_prediction  # [B, C]
-
-            # 1) Training loss: Gaussian-soft cross-entropy with targets centered at true count
-            loss = training_loss(logits, k_value)  # scalar batch mean
-
-
-            # 3) Diagnostic metric: hard NLL of the true class only
-            #    hard_nll = -log p(true_class)
-            log_p = F.log_softmax(logits, dim=1)  # [B,C]
-            idx = (k_int - 1).clamp(0, num_classes - 1).view(-1, 1)  # [B,1]
-            hard_nll = -log_p.gather(1, idx).squeeze(1)  # [B]
-            hard_nll_mean = hard_nll.mean()              # scalar batch mean
-
-            # Backprop + update (per batch optimization step)
-            loss.backward()
-            optimizer.step()
-
-            # -----------------------------
-            # Accumulate sample-weighted sums
-            # -----------------------------
-            bs = int(k_value.size(0))
-            epoch_count += bs
-
-            # training loss is a batch mean -> convert to sum over samples
-            epoch_train_loss_sum += float(loss.item()) * bs
-
-            # hard_nll_mean is a batch mean (classification) -> sum over samples
-            # For regression we stored NaN; skip accumulation in that case.
-            if torch.isfinite(hard_nll_mean):
-                epoch_hard_nll_sum += float(hard_nll_mean.item()) * bs
-
-            # -----------------------------
-            # Optional: batch logging (rank 0)
-            # -----------------------------
-            if is_main_process():
-                # Logging per-batch is useful for debugging but noisy; throttle if desired.
-                if global_step % 50 == 0:
-                    wandb.log(
-                        {
-                            "train/batch_loss": float(loss.item()),
-                            "train/batch_hard_nll": (
-                                float(hard_nll_mean.item()) if torch.isfinite(hard_nll_mean) else None
-                            ),
-                            "train/epoch": epoch + 1,
-                        },
-                        step=global_step,
-                    )
-                print(
-                    f"[epoch {epoch+1:03d} | step {global_step:06d}] "
-                    f"hard_nll={(hard_nll_mean.item() if torch.isfinite(hard_nll_mean) else float('nan')):.6f}"
-                )
-
-            global_step += 1
-
-        # =======================
-        # 7) DDP metric reduction (epoch averages)
-        # =======================
-        # We reduce SUMs and COUNT across all ranks for true global averages.
-        loss_sum = torch.tensor(epoch_train_loss_sum, device=device, dtype=torch.float32)
-        nll_sum = torch.tensor(epoch_hard_nll_sum, device=device, dtype=torch.float32)
-        count = torch.tensor(epoch_count, device=device, dtype=torch.float32)
-
-        if dist_is_initialized():
-            dist.all_reduce(loss_sum, op=dist.ReduceOp.SUM)
-            dist.all_reduce(nll_sum, op=dist.ReduceOp.SUM)
-            dist.all_reduce(count, op=dist.ReduceOp.SUM)
-
-        avg_loss = (loss_sum / count).item()
-
-        avg_hard_nll = (nll_sum / count).item()
-        if is_main_process():
-            print(
-                f"Epoch {epoch + 1}/{num_epochs} | "
-                f"AvgLoss(train)={avg_loss:.6f} | "
-                f"AvgHardNLL={avg_hard_nll:.6f}"
-            )
-            wandb.log(
-                {
-                    "train/epoch_loss": avg_loss,
-                    "train/epoch_hard_nll": avg_hard_nll,
-                    "train/epoch": epoch + 1,
-                }
-            )
-
-        # =======================
-        # 8) Validation evaluation (optional; no optimization)
-        # =======================
-        # Switch to eval mode for deterministic behavior in BN/Dropout
-        token_count_predictor.eval()
-
-        val_ce_sum = 0.0
-        val_nll_sum = 0.0
-        val_count = 0
-
-        with torch.no_grad():
-            for v_idx, v_batch in enumerate(test_recon_dataloader):
-                v_images = v_batch["image"].to(device, non_blocking=True).float()
-                v_recon_loss = v_batch[recon_loss_key].to(device, non_blocking=True).float().unsqueeze(1)
-                v_k_value = v_batch["k_value"].to(device, non_blocking=True).float().unsqueeze(1)
-                v_k_int = v_k_value.long().squeeze(1)
-
-                v_out = token_count_predictor(v_images, v_recon_loss)
-
-                bs = int(v_k_value.size(0))
-                val_count += bs
-
-                v_logits = v_out  # [B,C]
-                # Cross-entropy (hard labels)
-                target_idx = (v_k_int - 1).clamp(0, num_classes - 1)
-                ce_mean = F.cross_entropy(v_logits, target_idx, reduction="mean")
-
-                # Hard-NLL for true class
-                v_log_p = F.log_softmax(v_logits, dim=1)
-                v_idx = target_idx.view(-1, 1)
-                v_hard_nll = -v_log_p.gather(1, v_idx).squeeze(1)  # [B]
-                nll_mean = v_hard_nll.mean()
-
-                val_ce_sum += float(ce_mean.item()) * bs
-                val_nll_sum += float(nll_mean.item()) * bs
-
-        # DDP reduction for validation sums
-        val_ce_sum_t = torch.tensor(val_ce_sum, device=device, dtype=torch.float32)
-        val_nll_sum_t = torch.tensor(val_nll_sum, device=device, dtype=torch.float32)
-        val_count_t = torch.tensor(val_count, device=device, dtype=torch.float32)
-
-        if dist_is_initialized():
-            dist.all_reduce(val_ce_sum_t, op=dist.ReduceOp.SUM)
-            dist.all_reduce(val_nll_sum_t, op=dist.ReduceOp.SUM)
-            dist.all_reduce(val_count_t, op=dist.ReduceOp.SUM)
-
-        if not is_reg and val_count_t.item() > 0:
-            avg_val_ce = (val_ce_sum_t / val_count_t).item()
-            avg_val_nll = (val_nll_sum_t / val_count_t).item()
-        else:
-            avg_val_ce = float("nan")
-            avg_val_nll = float("nan")
+        reduced = ddp_reduce_epoch_metrics(train_metrics, device)
 
         if is_main_process():
-            print(
-                f"Validation Epoch {epoch + 1}/{num_epochs} | "
-                f"AvgCrossEntropy(val)={avg_val_ce:.6f} | "
-                f"AvgHardNLL(val)={avg_val_nll:.6f}"
-            )
-            wandb.log(
-                {
-                    "val/cross_entropy": avg_val_ce,
-                    "val/hard_nll": avg_val_nll,
-                    "train/epoch": epoch + 1,
-                }
-            )
+            wandb.log({"train/epoch_loss": reduced["avg_main"], "train/epoch_hard_nll": reduced["avg_nll"], "train/epoch": epoch+1})
+            save_checkpoint(cfg.experiment.checkpoint_path, epoch+1, token_count_predictor, optimizer, reduced["avg_main"])
 
-        # Return to train mode for next epoch
-        token_count_predictor.train()
+        val_metrics = validate_one_epoch(
+            token_count_predictor,
+            test_recon_dataloader,
+            device,
+            recon_loss_key,
+            num_classes,
+        )
+        val_reduced = ddp_reduce_epoch_metrics(val_metrics, device)
 
-        # =======================
-        # 9) Save checkpoint (rank 0 only)
-        # =======================
         if is_main_process():
-            state_dict = (
-                token_count_predictor.module.state_dict()
-                if isinstance(token_count_predictor, torch.nn.parallel.DistributedDataParallel)
-                else token_count_predictor.state_dict()
-            )
-            torch.save(
-                {
-                    "epoch": epoch + 1,  # next epoch to run
-                    "model_state_dict": state_dict,
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "loss": avg_loss,
-                },
-                f"{checkpoint_path}",
-            )
-            print(f"Saved checkpoint to: {checkpoint_path}")
-
+            wandb.log({
+                "val/cross_entropy": val_reduced["avg_main"],
+                "val/hard_nll": val_reduced["avg_nll"],
+                "train/epoch": epoch + 1,
+            })
 
 
 if __name__ == "__main__":
