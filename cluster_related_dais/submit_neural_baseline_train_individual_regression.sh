@@ -35,12 +35,10 @@ K_VALUES=(1 2 4 8 16 32 64 128 256)
 
 MIN_Ks=()
 MAX_Ks=()
-for i in {0..9}; do
-  MIN_Ks+=("${K_VALUES[$i]}")
-  next=$((i+1))
-  MAX_Ks+=("${K_VALUES[$next]}")
+for k in "${K_VALUES[@]}"; do
+  MIN_Ks+=("$k")
+  MAX_Ks+=("$k")
 done
-
 # Resolve job index: prefer SLURM_ARRAY_TASK_ID, else first CLI arg, else 0.
 JOB_INDEX=${SLURM_ARRAY_TASK_ID:-${1:-0}}
 
