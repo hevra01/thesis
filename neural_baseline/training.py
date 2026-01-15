@@ -519,7 +519,9 @@ def main(cfg: DictConfig):
             test_recon_dataloader,
             device,
             recon_loss_key,
-            num_classes, task_type=task_type
+            training_loss=training_loss,
+            num_classes=num_classes,
+            task_type=task_type
         )
         # reduce val metrics across DDP processes
         val_reduced = ddp_reduce_epoch_metrics(val_metrics, device)
