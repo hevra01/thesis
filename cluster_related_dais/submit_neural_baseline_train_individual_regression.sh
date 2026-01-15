@@ -58,7 +58,7 @@ echo "[RUN] Using LPIPS bin index $JOB_INDEX: min_error=$MIN_K, max_error=$MAX_K
 # --- Arguments for Hydra / Python module ---
 # Start with the experiment choice
 ARGS=( 
-     experiment=token_estimator_regression_neural_baseline_training_resnet
+     experiment=token_estimator_classification_neural_baseline_training_resnet
 
 	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
 
