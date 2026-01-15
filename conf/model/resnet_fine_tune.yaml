@@ -19,4 +19,4 @@ freeze_backbone: true
 keep_backbone_eval: true
 
 # choose task as classification or regression
-task: "classification"
+task_type: "classification"
