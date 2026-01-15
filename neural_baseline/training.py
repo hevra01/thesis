@@ -154,7 +154,7 @@ def build_recon_dataloader(cfg, reconstruction_path, base_loader_cfg, split="tra
     base_dataloader = instantiate(base_loader_cfg)
 
     # for evaluation, we typically do not want to shuffle for the sake of reproducibility
-    shuffle = bool(cfg.experiment.reconstruction_dataset.shuffle_train) if (split=="train") else bool(cfg.experiment.reconstruction_dataset.shuffle_eval)
+    shuffle = True if (split=="train") else False
 
     # reconstruction_data (list): List of dicts containing reconstruction metrics.
     # (img, k_value, mse_error, vgg_error).

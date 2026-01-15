@@ -4,7 +4,7 @@
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
 #SBATCH --time=0-0:30:00
 #SBATCH --nodes=1
-#SBATCH --mem=500GB
+#SBATCH --mem=250GB
 #SBATCH --gres=gpu:h200:2
 
 # --- Environment setup ---
@@ -71,7 +71,7 @@ ARGS=(
 	   experiment.project_name=neural_baselines_regression_recon_loss_prediction
      experiment.experiment_name="recon_loss_prediction"
      #experiment.group_name="dais_LPIPS_all_finetune_resnet_sigma${SIGMA}"
-
+     experiment.checkpoint_path="neural_baseline/checkpoint/predict_recon_loss/all.pt"
      experiment.task_type=regression
  )
 
