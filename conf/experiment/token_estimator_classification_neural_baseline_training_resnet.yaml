@@ -56,3 +56,4 @@ task_type: classification
 model:
   freeze_backbone: false
   use_condition:  true
+  task_type: ${experiment.task_type}

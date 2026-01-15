@@ -11,7 +11,7 @@ class ResNetCond(nn.Module):
         use_condition: bool = True,
         freeze_backbone: bool = False,
         keep_backbone_eval: bool = True,
-        task: str = "classification",
+        task_type: str = "classification",
     ):
         super().__init__()
         weights = "IMAGENET1K_V2" if pretrained else None
@@ -42,12 +42,12 @@ class ResNetCond(nn.Module):
         )
 
         # the head is either for regression or classification
-        if task == "regression":
+        if task_type == "regression":
             self.head = nn.Linear(in_dim + cond_dim, 1)
-        elif task == "classification":  # classification
+        elif task_type == "classification":  # classification
             self.head = nn.Linear(in_dim + cond_dim, num_classes)
         else:
-            raise ValueError(f"Unknown task: {task}")
+            raise ValueError(f"Unknown task: {task_type}")
 
     def forward(self, x, recon_loss_scalar=None):
         # Ensure backbone stays in eval during training if frozen
