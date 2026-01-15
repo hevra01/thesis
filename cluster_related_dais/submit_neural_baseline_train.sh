@@ -73,6 +73,7 @@ ARGS=(
      experiment.group_name="dais_LPIPS_all_finetune_resnet_sigma${SIGMA}"
 
      experiment.training.loss_training.sigma=${SIGMA}
+     experiment.task_type=regression
  )
 
 

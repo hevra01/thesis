@@ -28,9 +28,11 @@ optimizer_lr:
 
 training:
     num_epochs: 100
-    loss_training: 
+    loss_training_classification: 
       _target_: reconstruction_loss.GaussianCrossEntropyLoss
       sigma: 0.2
+    loss_training_regression: 
+      _target_: reconstruction_loss.MAELoss
 
 # this is for the main dataset that has the mse_errors, vgg_errors for all the images for different
 # values of k_values and the  bpp.
@@ -48,6 +50,8 @@ experiment_name: "classification_resnet"
 project_name: neural_baselines_resnet_classification
 group_name: resnet_baseline_experiments
 checkpoint_path: "neural_baseline/checkpoint/LPIPS/all.pt"
+
+task_type: classification
 
 model:
   freeze_backbone: false
