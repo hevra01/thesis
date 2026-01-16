@@ -70,7 +70,7 @@ ARGS=(
 
 	   experiment.project_name=neural_baselines_regression_recon_loss_prediction
      experiment.experiment_name="recon_loss_prediction"
-     #experiment.group_name="dais_LPIPS_all_finetune_resnet_sigma${SIGMA}"
+     experiment.group_name="fine_tune_resnet_for_all_ks"
      experiment.checkpoint_path="neural_baseline/checkpoint/predict_recon_loss/all.pt"
      experiment.task_type=regression
  )
