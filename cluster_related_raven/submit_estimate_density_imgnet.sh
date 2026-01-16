@@ -2,7 +2,7 @@
 #SBATCH -J reconstruct_tokens
 #SBATCH -o /ptmp/hevrapetek/thesis/logs/current.out
 #SBATCH -e /ptmp/hevrapetek/thesis/logs/current.err
-#SBATCH --time=0-08:00:00
+#SBATCH --time=0-03:40:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -25,12 +25,12 @@ USE_BATCH_WINDOW=${USE_BATCH_WINDOW:-1}   # 1 to override batch indices; 0 to us
 
 # Batch parameters (only used when USE_BATCH_WINDOW=1)
 BASE_START_BATCH=${BASE_START_BATCH:-0}
-BATCHES_PER_JOB=${BATCHES_PER_JOB:-960}   # Adjust based on GPU time/memory
+BATCHES_PER_JOB=${BATCHES_PER_JOB:-480}   # Adjust based on GPU time/memory
 
 # keep_k list (only used when USE_KEEP_K_SWEEP=1)
 if [ "$USE_KEEP_K_SWEEP" -eq 1 ]; then
 # [1,2,4,8,16,32,64,128,256] for conditional but 0 for unconditional
-  KEEP_K_LIST_RAW=${KEEP_K_LIST:-[256]}
+  KEEP_K_LIST_RAW=${KEEP_K_LIST:-[1,2,4,8,16,32,64,128,256]}
 else
   # Optional single override
   if [ -n "${KEEP_K_LIST:-}" ]; then
@@ -91,7 +91,7 @@ else
 fi
 
 # Construct output base path. estimate_density_RF.py appends _start_end.json.
-OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/train/reconst_256/
+OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/conditional/val/reconst_$SELECTED_KEEP_K/
 if [ -n "$SELECTED_KEEP_K" ]; then
   OUTPUT_BASE="$OUTPUT_ROOT/token_count${SELECTED_KEEP_K}/"
 else
@@ -114,15 +114,16 @@ if [ "$USE_BATCH_WINDOW" -eq 1 ]; then
 fi
 
 if [ -n "$SELECTED_KEEP_K" ]; then
-  ARGS+=( experiment.keep_k=$SELECTED_KEEP_K )
+  ARGS+=( experiment.keep_k=256)
 fi
 
 # Static overrides (adjust as needed)
 ARGS+=(
   experiment.output_path=$OUTPUT_BASE
-  experiment.register_path=/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz
-  experiment.dataset.root=/ptmp/hevrapetek/reconstruction_imagenet_APC_true/train/reconst_256
+  experiment.register_path="/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz"
+  experiment.dataset.root="/ptmp/hevrapetek/reconstruction_imagenet_APC_true/val/reconst_$SELECTED_KEEP_K"
   experiment.dataset.batch_size=20
+  experiment.conditional=true
   experiment.guidance_scale=7.5
   experiment.dataset.split=""
   experiment.hutchinson_samples=4
