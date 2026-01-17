@@ -24,7 +24,7 @@ USE_KEEP_K_SWEEP=${USE_KEEP_K_SWEEP:-1}   # 1 to sweep keep_k list; 0 to disable
 USE_BATCH_WINDOW=${USE_BATCH_WINDOW:-1}   # 1 to override batch indices; 0 to use config values
 
 # Batch parameters (only used when USE_BATCH_WINDOW=1)
-BASE_START_BATCH=${BASE_START_BATCH:-0}
+BASE_START_BATCH=${BASE_START_BATCH:-480}
 BATCHES_PER_JOB=${BATCHES_PER_JOB:-480}   # Adjust based on GPU time/memory
 
 # keep_k list (only used when USE_KEEP_K_SWEEP=1)
@@ -93,7 +93,7 @@ fi
 # Construct output base path. estimate_density_RF.py appends _start_end.json.
 OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/conditional/val/reconst_$SELECTED_KEEP_K/
 if [ -n "$SELECTED_KEEP_K" ]; then
-  OUTPUT_BASE="$OUTPUT_ROOT/token_count${SELECTED_KEEP_K}/"
+  OUTPUT_BASE="$OUTPUT_ROOT/token_count256/"
 else
   # Fallback base name when keep_k not explicitly selected here
   OUTPUT_BASE="$OUTPUT_ROOT/token_count_config"
