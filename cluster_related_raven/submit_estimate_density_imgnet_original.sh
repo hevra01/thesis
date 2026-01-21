@@ -2,7 +2,7 @@
 #SBATCH -J reconstruct_tokens
 #SBATCH -o /ptmp/hevrapetek/thesis/logs/current.out
 #SBATCH -e /ptmp/hevrapetek/thesis/logs/current.err
-#SBATCH --time=0-03:40:00
+#SBATCH --time=0-08:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -25,7 +25,7 @@ USE_BATCH_WINDOW=${USE_BATCH_WINDOW:-1}   # 1 to override batch indices; 0 to us
 
 # Batch parameters (only used when USE_BATCH_WINDOW=1)
 BASE_START_BATCH=${BASE_START_BATCH:-0}
-BATCHES_PER_JOB=${BATCHES_PER_JOB:-480}   # Adjust based on GPU time/memory
+BATCHES_PER_JOB=${BATCHES_PER_JOB:-960}   # Adjust based on GPU time/memory
 
 # keep_k list (only used when USE_KEEP_K_SWEEP=1)
 if [ "$USE_KEEP_K_SWEEP" -eq 1 ]; then
@@ -91,7 +91,7 @@ else
 fi
 
 # Construct output base path. estimate_density_RF.py appends _start_end.json.
-OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/original_val/unconditional/
+OUTPUT_ROOT=/ptmp/hevrapetek/thesis/data/datasets/density_imagenet/original_train/unconditional/
 if [ -n "$SELECTED_KEEP_K" ]; then
   OUTPUT_BASE="$OUTPUT_ROOT"
 else
@@ -120,8 +120,8 @@ fi
 # Static overrides (adjust as needed)
 ARGS+=(
   experiment.output_path=$OUTPUT_BASE
-  experiment.register_path="/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz"
-  experiment.dataset.root="/ptmp/hevrapetek/ILSVR2012/val_categorized/"
+  experiment.register_path="/ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"
+  experiment.dataset.root="/ptmp/hevrapetek/ILSVR2012/train/"
   experiment.dataset.batch_size=20
   experiment.conditional=false
   experiment.guidance_scale=7.5
