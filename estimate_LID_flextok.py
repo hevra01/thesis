@@ -2,15 +2,14 @@ import json
 import os
 
 import hydra
+import numpy as np
 from omegaconf import OmegaConf
 import torch
 import wandb
 from hydra.utils import instantiate
 from itertools import islice
-
-from LID.estimate_lid import compute_knees_for_all_data_points_in_batch, estimate_LID_over_t_range, estimate_LID_over_t_range_dataloader
-from LID.fokker_planck_estimator import FlipdEstimator
-from LID.utils import compute_knee, plot_lid_curve_with_knee
+from flextok.utils.misc import detect_bf16_support
+from LID.fokker_planck_estimator import RectifiedFlowLIDEstimator
 from sde.sdes import VpSDE
 
 @hydra.main(version_base=None, config_path="conf", config_name="estimate_lid")
@@ -22,8 +21,8 @@ def main(cfg):
 
     # Initialize W&B and dump Hydra config
     wandb.init(
-        project="LID_estimate",  
-        name=f"LID_estimate_reconst_1{start_batch_idx:04d}_{end_batch_idx:04d}",
+        project="LID_estimate_flextok",  
+        name=f"LID_estimate_flextok_{start_batch_idx:04d}_{end_batch_idx:04d}",
         config=OmegaConf.to_container(cfg, resolve=True)
     )
 
@@ -34,10 +33,14 @@ def main(cfg):
     data_dim = cfg.experiment.data_dim
 
     # Configure model
-    score_net, _ = instantiate(cfg.experiment.model)  # instantiate the model
+    flextok = instantiate(cfg.experiment.model)  # instantiate the model
     
     # Move the model to the specified device
-    score_net = score_net.to(device)  
+    flextok = flextok.to(device)
+
+    for p in flextok.parameters():
+        p.requires_grad_(False)
+    flextok.eval()
 
     checkpoint_path = cfg.experiment.checkpoint_path
 
@@ -48,20 +51,22 @@ def main(cfg):
 
     # Load the pretrained checkpoint
     ckpt = torch.load(checkpoint_path)
-    score_net.load_state_dict(ckpt, strict=True)
-
+    flextok.load_state_dict(ckpt, strict=True)
     # some models support fp16, so we convert the model to fp16 if specified
-    enable_fp16 = cfg.experiment.enable_fp16
-    if enable_fp16:
-        score_net.convert_to_fp16()
+    enable_bf16 = detect_bf16_support()
+    print('BF16 enabled:', enable_bf16)
 
     # Configure the dataloader
     dataloader = instantiate(cfg.experiment.dataset)
 
-    # variance-preserving SDE
-    model = VpSDE(score_net=score_net)
+    batch_size = dataloader.batch_size
 
-    lid_estimator = FlipdEstimator(ambient_dim=data_dim, model=model, device=device)
+    # read the register tokens from the .npz file
+    register_tokens_npz = cfg.experiment.register_path
+    data = np.load(register_tokens_npz)
+    register_tokens = data['token_ids']
+
+    lid_estimator = RectifiedFlowLIDEstimator(ambient_dim=data_dim, model=flextok, device=device)
 
     # the range of t values over which to estimate LID
     t_value = cfg.experiment.t_value
@@ -78,9 +83,25 @@ def main(cfg):
     for batch_idx, (images, labels) in enumerate(sliced_loader, start=start_batch_idx):
         images = images.to(device)
 
+        n = images.size(0) 
+
+        # compute the global sample range for this batch
+        start_sample = batch_idx * batch_size
+        end_sample = start_sample + n  # NOT (batch_idx+1)*batch_size
+
+        # slice exactly n token lists
+        slice_tokens = register_tokens[start_sample:end_sample]
+        assert len(slice_tokens) == n, f"token/image mismatch at batch {batch_idx}: tokens={len(slice_tokens)} images={n}"
+
+        token_ids_list = [
+            torch.as_tensor(t[:1], dtype=torch.long, device=device).unsqueeze(0)
+            for t in slice_tokens
+        ]
+
         # estimating for a single t value
-        lid_vals = lid_estimator._estimate_lid(images, t=t_value, hutchinson_sample_count=hutchinson_sample_count)
-        
+        # the lid estimation will be unconditional, but we need to provide the token_ids_list, maybe in the future it can be used.
+        lid_vals = lid_estimator.estimate(images, t=t_value, hutchinson_sample_count=hutchinson_sample_count, token_ids_list=token_ids_list)
+
         lid_list.append(lid_vals.tolist())
     
 

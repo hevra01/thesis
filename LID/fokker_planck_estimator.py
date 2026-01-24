@@ -76,7 +76,7 @@ class FokkerPlanckEstimator(ModelBasedLIDEstimator):
             """Computes the score function for the given input x, where x is a noisy image as a data point, and time t."""
             if isinstance(t, numbers.Number):
                 t = torch.tensor(t).float()
-            t: torch.Tensord
+            t: torch.Tensor
             t_repeated = t.repeat(x.shape[0]).to(x.device)
             
             noise = self.model.score(x, t_repeated, **score_kwargs)
@@ -167,3 +167,46 @@ class FlipdEstimator(FokkerPlanckEstimator):
         return self.ambient_dim + sigma_t * laplacian_term + score_norm_term
     
     
+class RectifiedFlowLIDEstimator(ModelBasedLIDEstimator):
+    def __init__(self, ambient_dim: int, model: torch.nn.Module, device: torch.device):
+        super().__init__(ambient_dim, model, device)
+        self.model = model
+        self.model.eval()
+
+    def _prepare_for_estimation(self, images, token_ids_list):
+        # The encoder expects a list of [1, C, H, W] images.
+        # we first need to encode the images to latents
+        # because we need the density estimates for the latents because
+        # reconstruction by rectified flow happens there.
+        # This creates a dictionary (data_dict) where the key is 
+        # self.vae.images_read_key and the value is a list of tensors 
+        # obtained by splitting the input tensor images along the batch dimension.
+        data_dict = {self.model.vae.images_read_key: images.split(1)}
+        #with torch.no_grad():
+            # first, encode the images into VAE latents.
+        data_dict = self.model.vae.encode(data_dict)
+
+        # Instead of encoding, use provided token IDs if available
+        if token_ids_list is not None:
+
+            # Use the existing preparation util to inject registers and keep_k
+            prepared_data = self.model._prepare_data_dict_for_detokenization(token_ids_list)
+
+            # Update the current data_dict with decoded registers and keep_k values
+            data_dict.update(prepared_data)
+    
+        return data_dict
+    
+    def estimate(self, x0: torch.Tensor, t_hyper: float, token_ids_list=None, hutchinson_samples: int = 2):
+
+        # this will take the images, and prepare the data dict
+        # with the vae latents and token ids.  
+        data_dict = self._prepare_for_estimation(x0, token_ids_list)
+        #data_dict = copy.deepcopy(data_dict)
+        # 1) forward pass without grad until the step before the last. 
+        data_dict = self.model.pipeline.forward_pass_until_t_hyper(data_dict, t_hyper)  # your Euler loop
+
+        div, norm = self.model.pipeline.forward_pass_at_t_hyper(data_dict, t_hyper)
+
+        # choose scaling; simplest is just combine them
+        return div, norm

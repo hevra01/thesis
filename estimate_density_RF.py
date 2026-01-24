@@ -112,25 +112,6 @@ def main(cfg):
         current_densities = [[i, s] for i, s in zip(current_integral, current_source)]
         densities.extend(current_densities)
 
-        # with get_bf16_context(enable_bf16):
-        #     integral_part = flextok.estimate_log_density(
-        #         images.to(device),
-        #         token_ids_list=token_ids_list,
-        #         hutchinson_samples=hutchinson_samples,
-        #         conditional=conditional,
-        #         timesteps=timesteps,
-        #         guidance_scale=guidance_scale
-        #     )
-
-        # # integral_part is shape [B, 1], device='cuda'
-        # integral_list = (
-        #     integral_part.detach()   # remove graph
-        #                 .cpu()      # move to CPU
-        #                 .squeeze(1) # shape [B]
-        #                 .tolist()   # -> List[float]
-        # )
-        # densities.extend(integral_list)
-
         # Save incrementally
         with open(output_path, "w") as f:
             json.dump(densities, f)
