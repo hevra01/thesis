@@ -1,0 +1,21 @@
+defaults:
+  - /model: flextok  # Use the Flextok model configuration
+  - /dataset: imageNet  # Use the ImageNet dataset configuration
+
+data_dim: 65536  # Dimension of the data, set to 256x256 for ImageNet
+enable_fp16: true
+t_value: 15
+output_lid_file_path: /BS/data_mani_compress/work/thesis/thesis/data/datasets/imageNet_LID_values/training_set/lid_15  # Path to save the LID values
+
+start_batch_idx: 0
+end_batch_idx: 3125
+
+register_path: /ptmp/hevrapetek/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz
+
+# --- override dataset here ---
+# because different experiments might handle different
+# batch sizes
+dataset:
+  batch_size: 16  # Override batch size for this experiment
+  split: ""  # Use the categorized validation split for ImageNet
+  root: "/BS/data_mani_compress/work/thesis/imagenet_reconstructed_APC_true/val_categorized/reconst_256"
