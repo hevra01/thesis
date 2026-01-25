@@ -493,6 +493,9 @@ def main(cfg: DictConfig):
 
     # Global step for W&B batch logging
     global_step = start_epoch * len(train_recon_dataloader)
+    # Track the best (lowest) validation loss seen so far; used to decide
+    # whether to overwrite the checkpoint. Initialized to +inf.
+    best_val_main = float("inf")
 
     for epoch in range(start_epoch, num_epochs):
         # train for an epoch
@@ -509,9 +512,8 @@ def main(cfg: DictConfig):
                 wandb.log({"train/cross_entropy": reduced["avg_main"], "train/hard_nll": reduced["avg_nll"]})
             else:
                 wandb.log({"train/mae": reduced["avg_main"], "train/hard_nll": None})
-            
-            # save checkpoint
-            save_checkpoint(cfg.experiment.checkpoint_path, epoch+1, token_count_predictor, optimizer, reduced["avg_main"])
+            # NOTE: Do not save checkpoint here. We only save after validation
+            # if the validation loss has improved compared to previous epochs.
 
         # validate for one epoch
         val_metrics = validate_one_epoch(
@@ -531,6 +533,17 @@ def main(cfg: DictConfig):
                 wandb.log({"val/cross_entropy": val_reduced["avg_main"], "val/hard_nll": val_reduced["avg_nll"]})
             else:
                 wandb.log({"val/mae": val_reduced["avg_main"], "val/hard_nll": None})
+            # Save checkpoint ONLY if validation loss decreased vs previous best
+            # This ensures we overwrite checkpoints only on improvement.
+            if val_reduced["avg_main"] < best_val_main:
+                best_val_main = val_reduced["avg_main"]
+                save_checkpoint(
+                    cfg.experiment.checkpoint_path,
+                    epoch + 1,
+                    token_count_predictor,
+                    optimizer,
+                    best_val_main,
+                )
 
 if __name__ == "__main__":
     try:
