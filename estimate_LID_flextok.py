@@ -8,7 +8,7 @@ import torch
 import wandb
 from hydra.utils import instantiate
 from itertools import islice
-from flextok.utils.misc import detect_bf16_support
+from flextok.utils.misc import detect_bf16_support, get_bf16_context
 from LID.fokker_planck_estimator import RectifiedFlowLIDEstimator
 from sde.sdes import VpSDE
 
@@ -33,25 +33,17 @@ def main(cfg):
     data_dim = cfg.experiment.data_dim
 
     # Configure model
-    flextok = instantiate(cfg.experiment.model)  # instantiate the model
-    
-    # Move the model to the specified device
-    flextok = flextok.to(device)
-
+    flextok = instantiate(cfg.experiment.model).to(device)  # instantiate the model
+    # Ensure inference-only setup to save memory
     for p in flextok.parameters():
         p.requires_grad_(False)
     flextok.eval()
-
-    checkpoint_path = cfg.experiment.checkpoint_path
 
     # Format output filename to include batch range
     base_output_path = cfg.experiment.output_lid_file_path
     output_path = f"{base_output_path}_{start_batch_idx:04d}_{end_batch_idx:04d}.json"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)  
 
-    # Load the pretrained checkpoint
-    ckpt = torch.load(checkpoint_path)
-    flextok.load_state_dict(ckpt, strict=True)
     # some models support fp16, so we convert the model to fp16 if specified
     enable_bf16 = detect_bf16_support()
     print('BF16 enabled:', enable_bf16)
@@ -100,10 +92,13 @@ def main(cfg):
 
         # estimating for a single t value
         # the lid estimation will be unconditional, but we need to provide the token_ids_list, maybe in the future it can be used.
-        lid_vals = lid_estimator.estimate(images, t=t_value, hutchinson_sample_count=hutchinson_sample_count, token_ids_list=token_ids_list)
+        # Use bf16 autocast where available for lower memory footprint
+        with get_bf16_context(enable_bf16):
+            div, norm = lid_estimator.estimate(images, t_hyper=t_value, hutchinson_samples=hutchinson_sample_count, token_ids_list=token_ids_list)
 
-        lid_list.append(lid_vals.tolist())
-    
+        per_instance = list(zip(div.tolist(), norm.tolist()))
+        lid_list.extend(per_instance)
+        print(lid_list)
 
     lid_values = [item for sublist in lid_list for item in sublist]
 

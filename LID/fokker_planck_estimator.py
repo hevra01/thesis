@@ -6,6 +6,7 @@ import torch
 from LID.model_based_estimator import ModelBasedLIDEstimator
 from sde.utils import compute_trace_of_jacobian, HUTCHINSON_DATA_DIM_THRESHOLD
 from sde.sdes import VpSDE
+from flextok.utils.misc import detect_bf16_support, get_bf16_context
 
 class FokkerPlanckEstimator(ModelBasedLIDEstimator):
     """
@@ -172,6 +173,8 @@ class RectifiedFlowLIDEstimator(ModelBasedLIDEstimator):
         super().__init__(ambient_dim, model, device)
         self.model = model
         self.model.eval()
+        # Use bf16 autocast when available to reduce memory footprint
+        self.enable_bf16 = detect_bf16_support()
 
     def _prepare_for_estimation(self, images, token_ids_list):
         # The encoder expects a list of [1, C, H, W] images.
@@ -182,9 +185,9 @@ class RectifiedFlowLIDEstimator(ModelBasedLIDEstimator):
         # self.vae.images_read_key and the value is a list of tensors 
         # obtained by splitting the input tensor images along the batch dimension.
         data_dict = {self.model.vae.images_read_key: images.split(1)}
-        #with torch.no_grad():
+        with torch.no_grad():
             # first, encode the images into VAE latents.
-        data_dict = self.model.vae.encode(data_dict)
+            data_dict = self.model.vae.encode(data_dict)
 
         # Instead of encoding, use provided token IDs if available
         if token_ids_list is not None:
@@ -204,9 +207,10 @@ class RectifiedFlowLIDEstimator(ModelBasedLIDEstimator):
         data_dict = self._prepare_for_estimation(x0, token_ids_list)
         #data_dict = copy.deepcopy(data_dict)
         # 1) forward pass without grad until the step before the last. 
-        data_dict = self.model.pipeline.forward_pass_until_t_hyper(data_dict, t_hyper)  # your Euler loop
+        with get_bf16_context(self.enable_bf16):
+            data_dict = self.model.pipeline.forward_pass_until_t_hyper(data_dict, t_hyper)  # your Euler loop
 
-        div, norm = self.model.pipeline.forward_pass_at_t_hyper(data_dict, t_hyper)
+            div, norm = self.model.pipeline.forward_pass_at_t_hyper(data_dict, t_hyper)
 
         # choose scaling; simplest is just combine them
         return div, norm
