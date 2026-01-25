@@ -530,9 +530,9 @@ def main(cfg: DictConfig):
 
         if is_main_process():
             if task_type == "classification":
-                wandb.log({"val/cross_entropy": val_reduced["avg_main"], "val/hard_nll": val_reduced["avg_nll"]})
+                wandb.log({"val/cross_entropy": val_reduced["avg_main"], "val/hard_nll": val_reduced["avg_nll"], "epoch": epoch})
             else:
-                wandb.log({"val/mae": val_reduced["avg_main"], "val/hard_nll": None})
+                wandb.log({"val/mae": val_reduced["avg_main"], "val/hard_nll": None, "epoch": epoch})
             # Save checkpoint ONLY if validation loss decreased vs previous best
             # This ensures we overwrite checkpoints only on improvement.
             if val_reduced["avg_main"] < best_val_main:

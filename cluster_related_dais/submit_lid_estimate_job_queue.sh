@@ -2,9 +2,9 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-1:00:00
+#SBATCH --time=0-2:00:00
 #SBATCH --nodes=1
-#SBATCH --mem=250GB # 250gb per gpu
+#SBATCH --mem=200GB # 250gb per gpu
 #SBATCH --gres=gpu:h200:1
 
 # --- Environment setup ---
@@ -48,7 +48,7 @@ BATCHES_PER_JOB=${BATCHES_PER_JOB:-329}  # Number of batches covered by each job
 # Optional: sweep over t values. Provide as space-separated list ("5 10 15"),
 # or bracketed comma-separated list ("[5,10,15]"). Defaults to commonly used values when USE_T_SWEEP=1.
 if [ "$USE_T_SWEEP" -eq 1 ]; then
-    T_VALUES_RAW=${T_VALUES:-[0.04, 0.08, 0.12, 0.2]}
+    T_VALUES_RAW=${T_VALUES:-[0.58, 0.6, 0.62, 0.64, 0.66]}
 else
     # Disable t sweep regardless of T_VALUES; if you want to sweep, set USE_T_SWEEP=1
     if [ -n "${T_VALUES:-}" ]; then
