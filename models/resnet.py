@@ -1,3 +1,5 @@
+from typing import Optional
+import os
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -5,13 +7,17 @@ import torchvision.models as models
 class ResNetCond(nn.Module):
     def __init__(
         self,
-        num_classes: int,
+        num_classes: Optional[int] = None,
         backbone: str = "resnet50",
         pretrained: bool = True,
         use_condition: bool = True,
         freeze_backbone: bool = False,
         keep_backbone_eval: bool = True,
         task_type: str = "classification",
+        # --- optional: load weights from a checkpoint ---
+        checkpoint_path: Optional[str] = None,
+        checkpoint_strict: bool = True,
+        map_location: Optional[str] = "cpu",
     ):
         super().__init__()
         weights = "IMAGENET1K_V2" if pretrained else None
@@ -49,6 +55,31 @@ class ResNetCond(nn.Module):
         else:
             raise ValueError(f"Unknown task: {task_type}")
 
+        # ------------------------------------------------------------
+        # Optional checkpoint loading
+        # - Accept either a raw state_dict or a dict with 'model_state_dict'.
+        # - Strip an optional 'module.' prefix (from DDP checkpoints).
+        # ------------------------------------------------------------
+        if checkpoint_path:
+            try:
+                if not os.path.isfile(checkpoint_path):
+                    raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+                ckpt = torch.load(checkpoint_path, map_location=map_location or "cpu")
+                state_dict = ckpt.get("model_state_dict", ckpt)
+
+                # Handle DDP 'module.' prefix if present
+                if any(k.startswith("module.") for k in state_dict.keys()):
+                    state_dict = {k.replace("module.", "", 1): v for k, v in state_dict.items()}
+
+                missing, unexpected = self.load_state_dict(state_dict, strict=checkpoint_strict)
+                if missing or unexpected:
+                    # Provide a concise log for debugging; users can set strict=False to ignore
+                    print(
+                        f"[ResNetCond] Loaded checkpoint with missing keys: {len(missing)}, unexpected keys: {len(unexpected)}"
+                    )
+            except Exception as e:
+                print(f"[ResNetCond] Failed to load checkpoint: {e}")
+
     def forward(self, x, recon_loss_scalar=None):
         # Ensure backbone stays in eval during training if frozen
         if self.freeze_backbone and self.keep_backbone_eval:
@@ -81,7 +112,7 @@ class ResNetCond(nn.Module):
     def head_parameters(self):
         """Return an iterable of parameters for the trainable head only.
 
-        Includes `classifier` and, if enabled, `cond_mlp`.
+        Includes `head` and, if enabled, `cond_mlp`.
         Useful for constructing an optimizer that excludes the frozen backbone.
         """
         params = list(self.head.parameters())
