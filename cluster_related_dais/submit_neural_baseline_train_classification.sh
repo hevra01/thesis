@@ -2,7 +2,7 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-2:00:00
+#SBATCH --time=0-3:30:00
 #SBATCH --nodes=1
 #SBATCH --mem=500GB
 #SBATCH --gres=gpu:h200:4
@@ -65,7 +65,7 @@ ARGS=(
 
 	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
 
-     experiment.reconstruction_dataset.batch_size=1024
+     experiment.reconstruction_dataset.batch_size=1220
      experiment.reconstruction_dataset.filter_key=null
 
 	   experiment.project_name=neural_baselines_classification_token_count_prediction
