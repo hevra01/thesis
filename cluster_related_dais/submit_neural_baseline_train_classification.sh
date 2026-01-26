@@ -61,7 +61,7 @@ SIGMA=0.6
 # --- Arguments for Hydra / Python module ---
 # Start with the experiment choice
 ARGS=( 
-     experiment=token_estimator_classification_neural_baseline_training_resnet
+     experiment=neural_baseline_fine_tuning_resnet
 
 	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
 
@@ -71,9 +71,9 @@ ARGS=(
 	   experiment.project_name=neural_baselines_new_lr
      experiment.experiment_name="classification_train_val_${SIGMA}"
      experiment.group_name="dais_LPIPS_all_finetune_resnet_sigma${SIGMA}"
-
+     experiment.checkpoint_path="neural_baseline/checkpoint/predict_token_count/all.pt"
      experiment.training.loss_training.sigma=${SIGMA}
-     experiment.task_type=regression
+     experiment.task_type=classification
  )
 
 

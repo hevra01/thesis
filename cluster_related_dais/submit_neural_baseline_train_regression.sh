@@ -2,7 +2,7 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-2:00:00
+#SBATCH --time=0-1:50:00
 #SBATCH --nodes=1
 #SBATCH --mem=500GB
 #SBATCH --gres=gpu:h200:4
@@ -61,7 +61,7 @@ SIGMA=0.6
 # --- Arguments for Hydra / Python module ---
 # Start with the experiment choice
 ARGS=( 
-     experiment=token_estimator_classification_neural_baseline_training_resnet
+     experiment=neural_baseline_fine_tuning_resnet
 
 	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
 
