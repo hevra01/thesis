@@ -2,7 +2,7 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-2:00:00
+#SBATCH --time=0-6:00:00
 #SBATCH --nodes=1
 #SBATCH --mem=200GB # 250gb per gpu
 #SBATCH --gres=gpu:h200:1
@@ -43,12 +43,12 @@ USE_BATCH_WINDOW=${USE_BATCH_WINDOW:-1}
 
 # Batch window parameters (used only when USE_BATCH_WINDOW=1)
 BASE_START_BATCH=${BASE_START_BATCH:-0}   # Starting batch index for block_index=0
-BATCHES_PER_JOB=${BATCHES_PER_JOB:-329}  # Number of batches covered by each job
+BATCHES_PER_JOB=${BATCHES_PER_JOB:-987}  # Number of batches covered by each job. for val 329, for train 987 = 329*3
 
 # Optional: sweep over t values. Provide as space-separated list ("5 10 15"),
 # or bracketed comma-separated list ("[5,10,15]"). Defaults to commonly used values when USE_T_SWEEP=1.
 if [ "$USE_T_SWEEP" -eq 1 ]; then
-    T_VALUES_RAW=${T_VALUES:-[0.58, 0.6, 0.62, 0.64, 0.66]}
+    T_VALUES_RAW=${T_VALUES:-[0.22, 0.24, 0.26, 0.28, 0.3, 0.32, 0.34]}
 else
     # Disable t sweep regardless of T_VALUES; if you want to sweep, set USE_T_SWEEP=1
     if [ -n "${T_VALUES:-}" ]; then
@@ -101,7 +101,7 @@ if [ "$USE_BATCH_WINDOW" -eq 1 ]; then
 fi
 
 # Base directory for LID output files; estimate_LID.py will append _{start}_{end}.json
-OUT_ROOT="data/datasets/imageNet_LID_values/flextok_based/original_images/val"
+OUT_ROOT="data/datasets/imageNet_LID_values/flextok_based/original_images/train"
 if [ -n "$T_VALUE_SELECTED" ]; then
     # Include t in the path to distinguish sweeps, e.g., .../val/t_18/lid_0000_3123.json
     OUT_BASE="$OUT_ROOT/t_${T_VALUE_SELECTED}/lid"
@@ -134,9 +134,9 @@ if [ "$USE_BATCH_WINDOW" -eq 1 ]; then
         experiment.start_batch_idx=$START_BATCH
         experiment.end_batch_idx=$END_BATCH
         experiment.dataset.root="/dais/fs/scratch/hevrapetek/"
-        experiment.dataset.split="val_categorized"
+        experiment.dataset.split="train"
         experiment.dataset.batch_size=152
-        experiment.register_path="data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz"
+        experiment.register_path="data/datasets/imagnet_register_tokens/imagnet_train_register_tokens.npz"
     )
 fi
 
