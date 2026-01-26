@@ -68,9 +68,9 @@ ARGS=(
      experiment.reconstruction_dataset.batch_size=1024
      experiment.reconstruction_dataset.filter_key=null
 
-	   experiment.project_name=neural_baselines_new_lr
+	   experiment.project_name=neural_baselines_classification_token_count_prediction
      experiment.experiment_name="classification_train_val_${SIGMA}"
-     experiment.group_name="dais_LPIPS_all_finetune_resnet_sigma${SIGMA}"
+     experiment.group_name="LPIPS_all_finetune_resnet_sigma${SIGMA}"
      experiment.checkpoint_path="neural_baseline/checkpoint/predict_token_count/all.pt"
      experiment.training.loss_training.sigma=${SIGMA}
      experiment.task_type=classification
