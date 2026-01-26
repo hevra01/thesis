@@ -72,7 +72,7 @@ ARGS=(
      experiment.experiment_name="classification_train_val_${SIGMA}"
      experiment.group_name="LPIPS_all_finetune_resnet_sigma${SIGMA}"
      experiment.checkpoint_path="neural_baseline/checkpoint/predict_token_count/all.pt"
-     experiment.training.loss_training.sigma=${SIGMA}
+     experiment.training.loss_training_classification.sigma=${SIGMA}
      experiment.task_type=classification
  )
 
