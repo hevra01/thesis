@@ -1,0 +1,32 @@
+defaults:
+  - /model: resnet_fine_tune
+  - /dataset: imageNet
+
+dataset:
+  split: val_categorized
+  train_or_eval: eval
+
+# this is for the main dataset that has the LPIPS loss for all the images for different
+# values of k_values.
+reconstruction_dataset:
+  reconstruction_data_path: "data/datasets/imagenet_reconstruction_losses/val_categorized/all_losses.json"
+  batch_size: 180 # this is the batch size for the reconstruction dataset on A40, 4 GPU, 180 batch size is possible
+  shuffle: true
+  reconstruction_loss_key: "LPIPS"  # e.g., "mse_error" or "vgg_error"
+  filter_key_regression: LPIPS
+  filter_key_classification: k_value
+  recon_loss_ranges_classification: [1, 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 64, 64, 128, 128, 256, 256]
+  recon_loss_ranges_regression: [0.007, 0.313, 0.375, 0.422, 0.463, 0.503, 0.543, 0.583, 0.622, 0.664, 1.172]
+  skip_range_regression: 1
+  skip_range_classification: 2
+
+device: cuda:0
+
+task: regression # options: classification, regression
+
+model:
+  checkpoint_path: neural_baseline/checkpoint/predict_recon_loss/all.pt
+
+experiment_name: eval_neural_baseline_recon_loss_prediction
+project_name: neural_baselines_regression_recon_loss_prediction
+group_name: eval_fine_tune_resnet_for_all_ks

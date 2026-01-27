@@ -35,7 +35,6 @@ def main(cfg: DictConfig):
     run = wandb.init(
             name=cfg.experiment.experiment_name,
             project=cfg.experiment.project_name,
-            group=cfg.experiment.group_name,
             config=OmegaConf.to_container(cfg, resolve=True),
         )
     
@@ -44,13 +43,10 @@ def main(cfg: DictConfig):
     wandb.run.summary["slurm_job_id"] = slurm_job_id
 
 
-
     # in the config for the dataset, we have already filtered the dataset according to the desired evaluation ranges.
     # we either filter by reconstruction loss range or by token count class based on the task.
-    base_dataset = instantiate(cfg.experiment.dataset)
+    base_dataloader = instantiate(cfg.experiment.dataset)
     model = instantiate(cfg.experiment.model).to(device).eval()
-
-    base_dataloader = torch.utils.data.DataLoader(base_dataset, batch_size=cfg.experiment.batch_size, shuffle=False)
 
     task = cfg.experiment.task  # either "classification" or "regression"
 

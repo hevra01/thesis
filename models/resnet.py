@@ -62,15 +62,20 @@ class ResNetCond(nn.Module):
         # ------------------------------------------------------------
         if checkpoint_path:
             try:
+                # check if the file exists, and if so, load it
                 if not os.path.isfile(checkpoint_path):
                     raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
                 ckpt = torch.load(checkpoint_path, map_location=map_location or "cpu")
+
+                # If ckpt has a key called "model_state_dict", return its value.
+                # Otherwise, return ckpt itself.
                 state_dict = ckpt.get("model_state_dict", ckpt)
 
                 # Handle DDP 'module.' prefix if present
                 if any(k.startswith("module.") for k in state_dict.keys()):
                     state_dict = {k.replace("module.", "", 1): v for k, v in state_dict.items()}
 
+                # load the weights into the model and report missing/unexpected keys
                 missing, unexpected = self.load_state_dict(state_dict, strict=checkpoint_strict)
                 if missing or unexpected:
                     # Provide a concise log for debugging; users can set strict=False to ignore
