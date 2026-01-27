@@ -200,13 +200,13 @@ def load_checkpoint_if_exists(ckp_path, model, optimizer, device):
     """
     Load model and optimizer state from a checkpoint file if it exists.
     """
-   # Create directory if checkpoint path includes one
+    # Create directory if checkpoint path includes one
     ckpt_dir = os.path.dirname(ckp_path)
     if ckpt_dir:
         os.makedirs(ckpt_dir, exist_ok=True)
 
     start_epoch = 0
-    last_loss = None
+    last_best_loss = None
 
     if os.path.isfile(ckp_path):
         if is_main_process():
@@ -221,18 +221,18 @@ def load_checkpoint_if_exists(ckp_path, model, optimizer, device):
 
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
         start_epoch = int(ckpt.get("epoch", 0))
-        last_loss = ckpt.get("loss", None)
+        last_best_loss = ckpt.get("loss", None)
 
         if is_main_process():
-            if last_loss is not None:
-                print(f"Resuming from epoch {start_epoch} with last avg loss = {last_loss:.6f}")
+            if last_best_loss is not None:
+                print(f"Resuming from epoch {start_epoch} with last best loss = {last_best_loss:.6f}")
             else:
                 print(f"Resuming from epoch {start_epoch}")
     else:
         if is_main_process():
             print("No checkpoint found. Starting from epoch 0.")
 
-    return start_epoch, last_loss
+    return start_epoch, last_best_loss
 
 
 def save_checkpoint(path, epoch_next, model, optimizer, avg_loss):
@@ -484,7 +484,7 @@ def main(cfg: DictConfig):
     num_classes = int(getattr(cfg.experiment.model, "num_classes", 256))
 
     # 5) Resume checkpoint if it exists
-    start_epoch, _ = load_checkpoint_if_exists(cfg.experiment.checkpoint_path, token_count_predictor, optimizer, device)
+    start_epoch, last_best_loss = load_checkpoint_if_exists(cfg.experiment.checkpoint_path_latest, token_count_predictor, optimizer, device)
 
     # =======================
     # 6) Training loop
@@ -495,7 +495,7 @@ def main(cfg: DictConfig):
     global_step = start_epoch * len(train_recon_dataloader)
     # Track the best (lowest) validation loss seen so far; used to decide
     # whether to overwrite the checkpoint. Initialized to +inf.
-    best_val_main = float("inf")
+    best_val_main = float("inf") if last_best_loss is None else last_best_loss
 
     for epoch in range(start_epoch, num_epochs):
         # train for an epoch
@@ -512,8 +512,7 @@ def main(cfg: DictConfig):
                 wandb.log({"train/cross_entropy": reduced["avg_main"], "train/hard_nll": reduced["avg_nll"]})
             else:
                 wandb.log({"train/mae": reduced["avg_main"], "train/hard_nll": None})
-            # NOTE: Do not save checkpoint here. We only save after validation
-            # if the validation loss has improved compared to previous epochs.
+        
 
         # validate for one epoch
         val_metrics = validate_one_epoch(
@@ -538,7 +537,16 @@ def main(cfg: DictConfig):
             if val_reduced["avg_main"] < best_val_main:
                 best_val_main = val_reduced["avg_main"]
                 save_checkpoint(
-                    cfg.experiment.checkpoint_path,
+                    cfg.experiment.checkpoint_path_best,
+                    epoch + 1,
+                    token_count_predictor,
+                    optimizer,
+                    best_val_main,
+                )
+
+            # Also save latest checkpoint every epoch regardless of val loss improvement
+            save_checkpoint(
+                    cfg.experiment.checkpoint_path_latest,
                     epoch + 1,
                     token_count_predictor,
                     optimizer,

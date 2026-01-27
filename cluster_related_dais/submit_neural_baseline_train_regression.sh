@@ -2,7 +2,7 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-1:50:00
+#SBATCH --time=0-2:00:00
 #SBATCH --nodes=1
 #SBATCH --mem=500GB
 #SBATCH --gres=gpu:h200:4
@@ -65,13 +65,14 @@ ARGS=(
 
 	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
 
-     experiment.reconstruction_dataset.batch_size=1024
+     experiment.reconstruction_dataset.batch_size=1220
      experiment.reconstruction_dataset.filter_key=null
 
 	   experiment.project_name=neural_baselines_regression_recon_loss_prediction
      experiment.experiment_name="recon_loss_prediction"
      experiment.group_name="fine_tune_resnet_for_all_ks"
-     experiment.checkpoint_path="neural_baseline/checkpoint/predict_recon_loss/all.pt"
+     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_recon_loss/best.pt"
+     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_recon_loss/latest.pt"
      experiment.task_type=regression
  )
 

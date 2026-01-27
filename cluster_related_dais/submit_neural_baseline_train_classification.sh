@@ -2,7 +2,7 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-3:30:00
+#SBATCH --time=0-3:40:00
 #SBATCH --nodes=1
 #SBATCH --mem=500GB
 #SBATCH --gres=gpu:h200:4
@@ -71,7 +71,8 @@ ARGS=(
 	   experiment.project_name=neural_baselines_classification_token_count_prediction
      experiment.experiment_name="classification_train_val_${SIGMA}"
      experiment.group_name="LPIPS_all_finetune_resnet_sigma${SIGMA}"
-     experiment.checkpoint_path="neural_baseline/checkpoint/predict_token_count/all.pt"
+     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_token_count/best.pt"
+     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_token_count/latest.pt"
      experiment.training.loss_training_classification.sigma=${SIGMA}
      experiment.task_type=classification
  )
