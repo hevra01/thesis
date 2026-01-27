@@ -42,7 +42,7 @@ USE_T_SWEEP=${USE_T_SWEEP:-1}
 USE_BATCH_WINDOW=${USE_BATCH_WINDOW:-1}
 
 # Batch window parameters (used only when USE_BATCH_WINDOW=1)
-BASE_START_BATCH=${BASE_START_BATCH:-0}   # Starting batch index for block_index=0
+BASE_START_BATCH=${BASE_START_BATCH:-6909}   # Starting batch index for block_index=0
 BATCHES_PER_JOB=${BATCHES_PER_JOB:-987}  # Number of batches covered by each job. for val 329, for train 987 = 329*3
 
 # Optional: sweep over t values. Provide as space-separated list ("5 10 15"),
