@@ -2,7 +2,7 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-3:00:00
+#SBATCH --time=0-1:30:00 # was 3
 #SBATCH --nodes=1
 #SBATCH --mem=500GB
 #SBATCH --gres=gpu:h200:4
