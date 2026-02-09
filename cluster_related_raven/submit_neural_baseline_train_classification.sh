@@ -70,6 +70,7 @@ ARGS=(
 
      experiment.dataset.root=/ptmp/hevrapetek/ILSVR2012/
      experiment.dataset.split=train
+     experiment.dataset_root=/ptmp/hevrapetek/ILSVR2012/
      experiment.reconstruction_dataset.batch_size=360
      experiment.reconstruction_dataset.filter_key=null
 
