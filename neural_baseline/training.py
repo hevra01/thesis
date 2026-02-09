@@ -91,7 +91,9 @@ def init_wandb_if_main(cfg):
             group=cfg.experiment.group_name,
             config=OmegaConf.to_container(cfg, resolve=True),
         )
-        wandb.run.summary["run_id"] = run.id
+        slurm_job_id = os.environ.get("SLURM_JOB_ID", "no_slurm")
+
+        wandb.run.summary["slurm_job_id"] = slurm_job_id
 
 def log_runtime_ddp_info(device, local_rank):
     if is_main_process():

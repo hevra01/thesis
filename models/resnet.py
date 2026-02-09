@@ -83,7 +83,7 @@ class ResNetCond(nn.Module):
                         f"[ResNetCond] Loaded checkpoint with missing keys: {len(missing)}, unexpected keys: {len(unexpected)}"
                     )
             except Exception as e:
-                print(f"[ResNetCond] Failed to load checkpoint: {e}")
+                raise RuntimeError(f"Checkpoint loading failed: {e}")
 
     def forward(self, x, recon_loss_scalar=None):
         # Ensure backbone stays in eval during training if frozen

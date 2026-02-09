@@ -70,11 +70,12 @@ ARGS=(
 
 	   experiment.project_name=neural_baselines_classification_token_count_prediction
      experiment.experiment_name="classification_train_val_${SIGMA}"
-     experiment.group_name="LPIPS_all_finetune_resnet_sigma${SIGMA}"
-     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_token_count/best.pt"
-     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_token_count/latest.pt"
+     experiment.group_name="LPIPS_all_finetune_resnet_dino_sigma${SIGMA}"
+     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_token_count/best_dino.pt"
+     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_token_count/latest_dino.pt"
      experiment.training.loss_training_classification.sigma=${SIGMA}
      experiment.task_type=classification
+     experiment.reconstruction_dataset.reconstruction_loss="DINOv2FeatureLoss"
  )
 
 

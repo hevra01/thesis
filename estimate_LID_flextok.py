@@ -98,7 +98,6 @@ def main(cfg):
 
         per_instance = list(zip(div.tolist(), norm.tolist()))
         lid_list.extend(per_instance)
-        print(lid_list)
 
     lid_values = [item for sublist in lid_list for item in sublist]
 
