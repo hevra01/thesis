@@ -68,7 +68,8 @@ SIGMA=0.6
 ARGS=( 
      experiment=neural_baseline_fine_tuning_resnet
 
-	   experiment.dataset_root="/scratch/inf0/user/mparcham/ILSVRC2012/"
+     experiment.dataset.root=/ptmp/hevrapetek/ILSVR2012/
+     experiment.dataset.split=train
      experiment.reconstruction_dataset.batch_size=360
      experiment.reconstruction_dataset.filter_key=null
 
