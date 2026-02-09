@@ -1,4 +1,5 @@
 import os
+import time
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import torch
@@ -275,7 +276,12 @@ def train_one_epoch(model, loader, optimizer, training_loss, device, recon_loss_
     if isinstance(loader.sampler, DistributedSampler):
         loader.sampler.set_epoch(epoch)
 
-    for batch in loader:
+    t_data_start = time.time()
+    for batch_idx, batch in enumerate(loader):
+        t_data_end = time.time()
+        t_data_elapsed = t_data_end - t_data_start
+
+        t_compute_start = time.time()
         images = batch["image"].to(device, non_blocking=True).float()
 
         # recon_loss is a model input feature (not the target)
@@ -322,12 +328,22 @@ def train_one_epoch(model, loader, optimizer, training_loss, device, recon_loss_
 
         loss_sum += float(loss.item()) * bs
 
+        t_compute_end = time.time()
+        t_compute_elapsed = t_compute_end - t_compute_start
+
+        if is_main_process() and (batch_idx < 3 or batch_idx % 200 == 0):
+            print(f"  [Epoch {epoch} | Batch {batch_idx}/{len(loader)}] "
+                  f"data: {t_data_elapsed:.3f}s | compute (fwd+bwd+step): {t_compute_elapsed:.3f}s | "
+                  f"loss: {loss.item():.4f}")
+
         if is_main_process() and global_step % 50 == 0:
             log_dict = {"train/batch_loss": float(loss.item())}
             if task_type == "classification":
                 log_dict["train/batch_hard_nll"] = float(hard_nll_mean.item())
             wandb.log(log_dict, step=global_step)
         global_step += 1
+
+        t_data_start = time.time()  # reset for next batch's data loading time
 
     return {"main_sum": loss_sum, "nll_sum": nll_sum, "count": count, "global_step": global_step}
 
@@ -500,8 +516,12 @@ def main(cfg: DictConfig):
     best_val_main = float("inf") if last_best_loss is None else last_best_loss
 
     for epoch in range(start_epoch, num_epochs):
+        t_epoch_start = time.time()
+
         # train for an epoch
         train_metrics = train_one_epoch(token_count_predictor, train_recon_dataloader, optimizer, training_loss, device, recon_loss_key, num_classes, epoch, global_step, task_type=task_type)
+
+        t_train_end = time.time()
 
         global_step = train_metrics["global_step"]
 
@@ -515,6 +535,7 @@ def main(cfg: DictConfig):
             else:
                 wandb.log({"train/mae": reduced["avg_main"], "train/hard_nll": None})
         
+        t_val_start = time.time()
 
         # validate for one epoch
         val_metrics = validate_one_epoch(
@@ -529,7 +550,13 @@ def main(cfg: DictConfig):
         # reduce val metrics across DDP processes
         val_reduced = ddp_reduce_epoch_metrics(val_metrics, device)
 
+        t_val_end = time.time()
+
         if is_main_process():
+            print(f"[Epoch {epoch}] train: {t_train_end - t_epoch_start:.1f}s | "
+                  f"val: {t_val_end - t_val_start:.1f}s | "
+                  f"total: {t_val_end - t_epoch_start:.1f}s")
+
             if task_type == "classification":
                 wandb.log({"val/cross_entropy": val_reduced["avg_main"], "val/hard_nll": val_reduced["avg_nll"], "epoch": epoch})
             else:

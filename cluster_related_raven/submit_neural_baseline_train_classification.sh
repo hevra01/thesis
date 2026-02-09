@@ -1,0 +1,93 @@
+#!/bin/bash
+#SBATCH -J lpips_variance
+#SBATCH -o /ptmp/hevrapetek/thesis/logs/lpips.out
+#SBATCH -e /ptmp/hevrapetek/thesis/logs/lpips.err
+#SBATCH --time=0-01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --gres=gpu:a40:1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=16G
+
+# --------------------------------------------------
+# Environment setup
+# --------------------------------------------------
+module purge
+module load anaconda/3/2023.03
+source ~/.bashrc
+source activate /u/hevrapetek/conda-envs/thesis
+source /ptmp/hevrapetek/thesis/.wandb_secrets.sh
+
+cd /ptmp/hevrapetek/thesis
+
+# Helpful runtime env for performance/stability
+export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-8}
+export NCCL_DEBUG=warn
+# New name (old NCCL_ASYNC_ERROR_HANDLING is deprecated)
+export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
+
+echo "[RUN] SLURM_GPUS_ON_NODE=${SLURM_GPUS_ON_NODE}"
+echo "[RUN] SLURM_JOB_NODELIST=${SLURM_JOB_NODELIST}"
+echo "[RUN] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
+echo "[RUN] nvidia-smi -L:" && nvidia-smi -L || true
+
+NUM_GPUS=${SLURM_GPUS_ON_NODE:-4}
+
+# --- LPIPS bin ranges (min/max per job index) ---
+# Source edges (11 values). We'll create 10 bins: [edges[i], edges[i+1]] for i=0..9.
+EDGES=(
+  0.02079272 0.12662399 0.23245525 0.33828652 0.44411778 0.54994905 \
+  0.65578032 0.76161158 0.86744285 0.97327411 1.07910538
+)
+
+MIN_ERRORS=()
+MAX_ERRORS=()
+for i in {0..9}; do
+  MIN_ERRORS+=("${EDGES[$i]}")
+  next=$((i+1))
+  MAX_ERRORS+=("${EDGES[$next]}")
+done
+
+# Resolve job index: prefer SLURM_ARRAY_TASK_ID, else first CLI arg, else 0.
+JOB_INDEX=${SLURM_ARRAY_TASK_ID:-${1:-0}}
+
+# Clamp and validate JOB_INDEX in [0, 9]
+if [[ "$JOB_INDEX" -lt 0 || "$JOB_INDEX" -gt 9 ]]; then
+  echo "[ERROR] JOB_INDEX=$JOB_INDEX out of range [0..9]." >&2
+  exit 1
+fi
+
+MIN_ERR=${MIN_ERRORS[$JOB_INDEX]}
+MAX_ERR=${MAX_ERRORS[$JOB_INDEX]}
+
+echo "[RUN] Using LPIPS bin index $JOB_INDEX: min_error=$MIN_ERR, max_error=$MAX_ERR"
+SIGMA=0.6
+
+# --- Arguments for Hydra / Python module ---
+# Start with the experiment choice
+ARGS=( 
+     experiment=neural_baseline_fine_tuning_resnet
+
+	   experiment.dataset_root="/scratch/inf0/user/mparcham/ILSVRC2012/"
+     experiment.reconstruction_dataset.batch_size=360
+     experiment.reconstruction_dataset.filter_key=null
+
+	   experiment.project_name=neural_baselines_classification_token_count_prediction
+     experiment.experiment_name="classification_train_val_${SIGMA}"
+     experiment.group_name="LPIPS_all_finetune_resnet_dino_sigma${SIGMA}"
+     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_token_count/best_dino.pt"
+     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_token_count/latest_dino.pt"
+     experiment.training.loss_training_classification.sigma=${SIGMA}
+     experiment.task_type=classification
+     experiment.reconstruction_dataset.reconstruction_loss="DINOv2FeatureLoss"
+ )
+
+
+# (Optional) print final args for debugging
+echo "[RUN] Hydra args:"
+printf '  %q\n' "${ARGS[@]}"
+
+# --- Run ---
+HYDRA_FULL_ERROR=1 torchrun --standalone --nproc_per_node="${NUM_GPUS}" \
+  -m neural_baseline.training \
+  "${ARGS[@]}"
