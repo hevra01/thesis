@@ -171,7 +171,7 @@ def build_recon_dataloader(cfg, reconstruction_path, base_loader_cfg, split="tra
     )
 
     batch_size = int(cfg.experiment.reconstruction_dataset.batch_size)
-    num_workers = int(getattr(cfg.experiment.reconstruction_dataset, "num_workers", 4))
+    num_workers = int(getattr(cfg.experiment.reconstruction_dataset, "num_workers", 12))
 
     # In DDP, DistributedSampler shards the dataset across processes.
     sampler = (
@@ -194,6 +194,7 @@ def build_recon_dataloader(cfg, reconstruction_path, base_loader_cfg, split="tra
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=(num_workers > 0),
+        prefetch_factor=4,
     )
 
     return recon_dataloader
