@@ -49,7 +49,12 @@ class ResNetCond(nn.Module):
 
         # the head is either for regression or classification
         if task_type == "regression":
-            self.head = nn.Linear(in_dim + cond_dim, 1)
+            self.head = nn.Sequential(
+                nn.Linear(in_dim + cond_dim, 256),
+                nn.ReLU(),
+                nn.Linear(256, 1),
+            )
+
         elif task_type == "classification":  # classification
             self.head = nn.Linear(in_dim + cond_dim, num_classes)
         else:
