@@ -70,11 +70,11 @@ ARGS=(
 
 	   experiment.project_name=neural_baselines_regression_recon_loss_prediction
      experiment.experiment_name="recon_loss_prediction"
-     experiment.group_name="fine_tune_resnet_for_all_ks_DINO_loss"
-     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_recon_loss/best_dino.pt"
-     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_recon_loss/latest_dino.pt"
+     experiment.group_name="fine_tune_resnet_for_all_ks_LPIPS_condition_improved_loss"
+     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_recon_loss_condition_improved/best.pt"
+     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_recon_loss_condition_improved/latest.pt"
      experiment.task_type=regression
-     experiment.reconstruction_dataset.reconstruction_loss="DINOv2FeatureLoss"
+     experiment.reconstruction_dataset.reconstruction_loss="LPIPS"
  )
 
 
