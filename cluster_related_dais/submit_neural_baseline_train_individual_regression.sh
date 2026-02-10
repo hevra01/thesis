@@ -4,7 +4,7 @@
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
 #SBATCH --time=0-1:00:00
 #SBATCH --nodes=1
-#SBATCH --mem=100000
+#SBATCH --mem=400GB # 250gb per gpu
 
 #SBATCH --gres=gpu:h200:2
 
@@ -61,7 +61,7 @@ ARGS=(
 	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
 
      experiment.reconstruction_dataset.batch_size=1220
-     experiment.reconstruction_dataset.num_workers=8
+     experiment.reconstruction_dataset.num_workers=16
      experiment.reconstruction_dataset.prefetch_factor=6
     
 
