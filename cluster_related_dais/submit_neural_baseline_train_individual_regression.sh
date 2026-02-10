@@ -65,6 +65,7 @@ ARGS=(
      experiment.reconstruction_dataset.filter_key="k_value"
      experiment.reconstruction_dataset.min_error=${MIN_K}
      experiment.reconstruction_dataset.max_error=${MAX_K}
+     experiment.reconstruction_dataset.num_workers=6
 
 	   experiment.project_name=neural_baselines_regression_recon_loss_prediction
      experiment.group_name="unconditional_LPIPS"
