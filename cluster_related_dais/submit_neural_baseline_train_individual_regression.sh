@@ -2,7 +2,7 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-5:00:00
+#SBATCH --time=0-1:00:00
 #SBATCH --nodes=1
 #SBATCH --mem=100000
 
@@ -56,21 +56,23 @@ echo "[RUN] Using LPIPS bin index $JOB_INDEX: min_error=$MIN_K, max_error=$MAX_K
 # --- Arguments for Hydra / Python module ---
 # Start with the experiment choice
 ARGS=( 
-     experiment=token_estimator_classification_neural_baseline_training_resnet
+     experiment=neural_baseline_fine_tuning_resnet
 
 	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
 
-     experiment.reconstruction_dataset.batch_size=1024
+     experiment.reconstruction_dataset.batch_size=1220
+
+     experiment.reconstruction_dataset.filter_key="k_value"
      experiment.reconstruction_dataset.min_error=${MIN_K}
      experiment.reconstruction_dataset.max_error=${MAX_K}
 
 	   experiment.project_name=neural_baselines_regression_recon_loss_prediction
-     #experiment.group_name="regression__${MIN_K}"
+     experiment.group_name="unconditional_LPIPS"
      experiment.experiment_name="min_${MIN_K}"
-     experiment.reconstruction_dataset.filter_key="k_value"
      experiment.task_type=regression
      experiment.model.use_condition=false
-     experiment.checkpoint_path="neural_baseline/checkpoint/regression/min_${MIN_K}.pt"
+     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_recon_loss/min_${MIN_K}_latest.pt"
+     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_recon_loss/min_${MIN_K}_best.pt"
  )
 
 
