@@ -113,7 +113,7 @@ def main(cfg: DictConfig):
     recon_loss_key = cfg.experiment.reconstruction_dataset.reconstruction_loss
     recon_dataset = ReconstructionDataset_Neural(
         reconstruction_data=reconstruction_data,
-        dataloader=dataloader,
+        base_dataset=dataloader,
         error_key=recon_loss_key
     )
 

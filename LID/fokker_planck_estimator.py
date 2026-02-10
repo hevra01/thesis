@@ -209,8 +209,7 @@ class RectifiedFlowLIDEstimator(ModelBasedLIDEstimator):
         # 1) forward pass without grad until the step before the last. 
         with get_bf16_context(self.enable_bf16):
             data_dict = self.model.pipeline.forward_pass_until_t_hyper(data_dict, t_hyper)  # your Euler loop
-
+            
             div, norm = self.model.pipeline.forward_pass_at_t_hyper(data_dict, t_hyper)
-
         # choose scaling; simplest is just combine them
         return div, norm

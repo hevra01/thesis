@@ -14,6 +14,7 @@ To evaluate the performance of these models, we will:
 
 import json
 import os
+import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 import torch
@@ -29,6 +30,7 @@ def compute_hard_nll_mean(logits: torch.Tensor, k_int: torch.Tensor) -> torch.Te
     hard_nll = -log_p.gather(1, idx).squeeze(1)
     return hard_nll.mean()
 
+@hydra.main(version_base=None, config_path="../conf", config_name="eval_neural_baseline")
 def main(cfg: DictConfig):
     device = cfg.experiment.device
 
@@ -66,13 +68,13 @@ def main(cfg: DictConfig):
     recon_loss_key = cfg.experiment.reconstruction_dataset.reconstruction_loss_key
 
     # reconstruction_data holds per-image errors for multiple K values + token counts.
-    with open(cfg.experiment.reconstruction_dataset.reconstruction_train_data_path, "r") as f:
+    with open(cfg.experiment.reconstruction_dataset.reconstruction_data_path, "r") as f:
         reconstruction_data = json.load(f)
 
 
     for current_range in range(0, len(filter_range) - 1, skip_range):
         min_error, max_error = filter_range[current_range], filter_range[current_range + 1]
-        print(f"Evaluating for reconstruction loss range: [{min_error}, {max_error}]")
+        print(f"Evaluating for ranges for {task}: [{min_error}, {max_error}]")
 
         # since we are evaluating the model performance for specific reconstruction loss ranges,
         # we create a new dataset that filters the images based on the current reconstruction loss range.
@@ -94,15 +96,15 @@ def main(cfg: DictConfig):
 
             # Iterate over the dataloader
             for batch in recon_dataloader:
-                images = batch["images"].to(device)
+                images = batch["image"].to(device)
                 k_value = batch["k_value"].to(device)  # true token count class
-                recon_loss = batch[recon_loss].to(device) # condition
+                recon_loss = batch[recon_loss_key].float().to(device) # condition
 
                 logits = model(images, recon_loss)  # [B,C]
                 hard_nll_mean += compute_hard_nll_mean(logits, k_value)
 
             # find average hard NLL over all batches
-            hard_nll_mean /= len(recon_dataset)
+            hard_nll_mean /= len(recon_dataloader)
             print(f"Hard NLL Mean (Classification Task) for {min_error}-{max_error}: {hard_nll_mean.item():.4f}")
 
         elif task == "regression":
@@ -113,17 +115,21 @@ def main(cfg: DictConfig):
             max_logk = 8.0  # since log2(256) = 8
 
             # Iterate over the dataloader
-            for batch in recon_dataset:
-                images = batch["images"].to(device)
+            for batch in recon_dataloader:
+                images = batch["image"].to(device)
                 k_value = batch["k_value"].to(device)  # condition
                 cond = torch.log2(k_value) / max_logk
 
-                true_recon_loss = batch[recon_loss].to(device) # condition
+                true_recon_loss = batch[recon_loss_key].float().to(device).view(-1, 1)  # [B,1]
                 pred_recon_loss = model(images, cond)  # predicted reconstruction loss
                 mae_mean += mae_loss_fn(pred_recon_loss, true_recon_loss).item()
 
             # find average MAE over all batches
-            mae_mean /= len(recon_dataset)
+            mae_mean /= len(recon_dataloader)
             print(f"MAE Mean (Regression Task) for {min_error}-{max_error}: {mae_mean:.4f}")
         else:
             raise ValueError(f"Unknown task: {task}")
+        
+
+if __name__ == "__main__":
+    main()

@@ -3,6 +3,7 @@
 
 # these are the files from hydra
 outputs/
+output/
 
 output_hev/
 

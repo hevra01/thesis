@@ -12,20 +12,38 @@ reconstruction_dataset:
   reconstruction_data_path: "data/datasets/imagenet_reconstruction_losses/val_categorized/all_losses.json"
   batch_size: 180 # this is the batch size for the reconstruction dataset on A40, 4 GPU, 180 batch size is possible
   shuffle: true
+  num_workers: 6
+  prefetch_factor: 2
   reconstruction_loss_key: "LPIPS"  # e.g., "mse_error" or "vgg_error"
-  filter_key_regression: LPIPS
-  filter_key_classification: k_value
-  recon_loss_ranges_classification: [1, 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 64, 64, 128, 128, 256, 256]
-  recon_loss_ranges_regression: [0.007, 0.313, 0.375, 0.422, 0.463, 0.503, 0.543, 0.583, 0.622, 0.664, 1.172]
-  skip_range_regression: 1
-  skip_range_classification: 2
+  
+  # in regression, we predict the actual reconstruction loss value
+  # and we might either want to evaluate the performance on how well 
+  # a certain recon loss range is predicted (e.g., 0.1 to 0.2)
+  # or we might want to evaluate how well the recon losses that belong to a certain token count are predicted. 
+  # hence, the filter key for regression can actually be either LPIPS or k_value. 
+  filter_key_regression: k_value # LPIPS or k_value
+
+
+  # in classification, we predict the token count. we can evaluate the performance either 
+  # based on how well a certain class is predicted or based on how well the token counts that belong to a certain
+  # recon loss range are predicted. hence, the filter key for classification can actually be either LPIPS or k_value.
+  filter_key_classification: LPIPS # LPIPS or k_value
+  
+  recon_loss_ranges_classification: [0.007, 0.313, 0.375, 0.422, 0.463, 0.503, 0.543, 0.583, 0.622, 0.664, 1.172] # [1, 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 64, 64, 128, 128, 256, 256] or [0.007, 0.313, 0.375, 0.422, 0.463, 0.503, 0.543, 0.583, 0.622, 0.664, 1.172]
+  recon_loss_ranges_regression: [1, 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 64, 64, 128, 128, 256, 256] # [1, 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 64, 64, 128, 128, 256, 256] or [0.007, 0.313, 0.375, 0.422, 0.463, 0.503, 0.543, 0.583, 0.622, 0.664, 1.172]
+  skip_range_regression: 2 # 1 or 2
+  skip_range_classification: 1 # 1 or 2
 
 device: cuda:0
 
 task: regression # options: classification, regression
 
 model:
+  pretrained: false
   checkpoint_path: neural_baseline/checkpoint/predict_recon_loss/all.pt
+  use_condition: true
+  task_type: regression  # options: classification, regression
+
 
 experiment_name: eval_neural_baseline_recon_loss_prediction
 project_name: neural_baselines_regression_recon_loss_prediction
