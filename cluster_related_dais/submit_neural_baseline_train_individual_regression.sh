@@ -61,13 +61,15 @@ ARGS=(
 	   experiment.dataset_root="/dais/fs/scratch/hevrapetek/"
 
      experiment.reconstruction_dataset.batch_size=1220
+     experiment.reconstruction_dataset.num_workers=8
+     experiment.reconstruction_dataset.prefetch_factor=6
+    
 
      experiment.reconstruction_dataset.filter_key="k_value"
      experiment.reconstruction_dataset.min_error=${MIN_K}
      experiment.reconstruction_dataset.max_error=${MAX_K}
-     experiment.reconstruction_dataset.num_workers=6
 
-	   experiment.project_name=neural_baselines_regression_recon_loss_prediction
+     experiment.project_name=neural_baselines_regression_recon_loss_prediction
      experiment.group_name="unconditional_LPIPS"
      experiment.experiment_name="min_${MIN_K}"
      experiment.task_type=regression

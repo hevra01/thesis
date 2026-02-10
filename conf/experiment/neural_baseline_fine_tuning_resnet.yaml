@@ -42,6 +42,7 @@ reconstruction_dataset:
   batch_size: 180 # this is the batch size for the reconstruction dataset on A40, 4 GPU, 180 batch size is possible
   shuffle: true
   num_workers: 6
+  prefetch_factor: 2
   reconstruction_loss: "LPIPS"  # e.g., "mse_error" or "vgg_error"
   filter_key: LPIPS
   min_error: 0.02079272
