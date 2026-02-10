@@ -60,7 +60,7 @@ def build_optimizer_param_groups(
         raise ValueError("Both lr_backbone and lr_head must be provided.")
 
     backbone_params = []
-    head_like_params = []  # head + cond_mlp
+    head_like_params = []  # head + cond_mlp + film 
 
     for name, p in model.named_parameters():
         if not p.requires_grad:
@@ -68,7 +68,8 @@ def build_optimizer_param_groups(
 
         if name.startswith("backbone."):
             backbone_params.append(p)
-        elif name.startswith("head.") or name.startswith("cond_mlp."):
+        # Updated: include FiLM params (and optionally accept old cond_mlp for compatibility)
+        elif name.startswith("head.") or name.startswith("film.") or name.startswith("cond_mlp."):
             head_like_params.append(p)
         else:
             # If you later add more modules, decide what to do with them.
@@ -77,7 +78,7 @@ def build_optimizer_param_groups(
     if not backbone_params:
         raise ValueError("No backbone parameters found (expected names starting with 'backbone.').")
     if not head_like_params:
-        raise ValueError("No head/cond_mlp parameters found (expected 'head.' or 'cond_mlp.').")
+        raise ValueError("No head/cond_mlp/film parameters found (expected 'head.', 'film.', or 'cond_mlp.').")
 
     return [
         {"params": backbone_params, "lr": lr_backbone},
