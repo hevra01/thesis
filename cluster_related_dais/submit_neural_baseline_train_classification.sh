@@ -72,8 +72,8 @@ ARGS=(
      experiment.experiment_name="classification_train_val_${SIGMA}"
      experiment.group_name="LPIPS_all_finetune_resnet_filM_sigma${SIGMA}"
      
-     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_token_count/best.pt"
-     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_token_count/latest.pt"
+     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_token_count_filM/best.pt"
+     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_token_count_filM/latest.pt"
      
      experiment.training.loss_training_classification.sigma=${SIGMA}
      experiment.task_type=classification
