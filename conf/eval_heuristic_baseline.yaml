@@ -1,0 +1,7 @@
+# =============================================================================
+# Evaluation Configuration for HeuristicTokenCountPredictor
+# =============================================================================
+
+defaults:
+  - experiment: eval_heuristic_baseline
+

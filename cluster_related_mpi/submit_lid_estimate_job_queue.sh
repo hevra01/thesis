@@ -26,11 +26,11 @@
 
 #SBATCH --job-name lid_estimations       # Name of the job (shows up in squeue)
 #SBATCH --output logs/output_lid_799_imgnet_minus_score.txt       # Stdout log file (in logs/ directory) (anything your script prints, like print()) will go to logs/output_<jobid>.txt
-#SBATCH --error logs/error_temp_error_4.txt         # Stderr log file (errors go here) (any errors or exceptions) go to logs/error_<jobid>.txt
+#SBATCH --error logs/error2_temp_error_4.txt         # Stderr log file (errors go here) (any errors or exceptions) go to logs/error_<jobid>.txt
 
 #SBATCH --partition gpu22              # Partition to submit to (e.g., gpu24 is H100, 80GB VRAM)
-#SBATCH --gres gpu:a100:1              # Request 1 GPU
-#SBATCH --time 0-03:50:00              # Max wall time for the job (2 days)
+#SBATCH --gres gpu:a40:1              # Request 1 GPU
+#SBATCH --time 0-01:00:00              # Max wall time for the job (2 days)
 #SBATCH --nodes 1                      # Number of nodes (machines)
 #SBATCH --ntasks 1                     # Number of tasks (normally 1 for single GPU jobs)
 
@@ -55,7 +55,7 @@ cd /BS/data_mani_compress/work/thesis/thesis
 
 # ---------------- Sweep configuration (array-friendly) ---------------- #
 # Name your Hydra experiment (maps to conf/estimate_lid.yaml entries)
-EXPERIMENT_NAME=${EXPERIMENT_NAME:-estimate_lid_imageNet}
+EXPERIMENT_NAME=${EXPERIMENT_NAME:-estimate_lid_imageNet_flextok}
 
 # Control whether to sweep t and/or override batch start/end indices via job id mapping.
 # USE_T_SWEEP: 1 to sweep t (use T_VALUES or default list), 0 to disable t sweep entirely
@@ -67,12 +67,12 @@ USE_BATCH_WINDOW=${USE_BATCH_WINDOW:-1}
 
 # Batch window parameters (used only when USE_BATCH_WINDOW=1)
 BASE_START_BATCH=${BASE_START_BATCH:-0}   # Starting batch index for block_index=0
-BATCHES_PER_JOB=${BATCHES_PER_JOB:-3124}  # Number of batches covered by each job
+BATCHES_PER_JOB=${BATCHES_PER_JOB:-794}  # Number of batches covered by each job
 
 # Optional: sweep over t values. Provide as space-separated list ("5 10 15"),
 # or bracketed comma-separated list ("[5,10,15]"). Defaults to commonly used values when USE_T_SWEEP=1.
 if [ "$USE_T_SWEEP" -eq 1 ]; then
-    T_VALUES_RAW=${T_VALUES:-[14]}
+    T_VALUES_RAW=${T_VALUES:-[0.04, 0.08, 0.12, 0.2]}
 else
     # Disable t sweep regardless of T_VALUES; if you want to sweep, set USE_T_SWEEP=1
     if [ -n "${T_VALUES:-}" ]; then
@@ -125,7 +125,7 @@ if [ "$USE_BATCH_WINDOW" -eq 1 ]; then
 fi
 
 # Base directory for LID output files; estimate_LID.py will append _{start}_{end}.json
-OUT_ROOT="/BS/data_mani_compress/work/thesis/thesis/data/datasets/imageNet_LID_values/reconst_256_images/val"
+OUT_ROOT="data/datasets/imageNet_LID_values/flextok_based/original_images/val"
 if [ -n "$T_VALUE_SELECTED" ]; then
     # Include t in the path to distinguish sweeps, e.g., .../val/t_18/lid_0000_3123.json
     OUT_BASE="$OUT_ROOT/t_${T_VALUE_SELECTED}/lid"
@@ -157,6 +157,10 @@ if [ "$USE_BATCH_WINDOW" -eq 1 ]; then
     ARGS+=(
         experiment.start_batch_idx=$START_BATCH
         experiment.end_batch_idx=$END_BATCH
+        experiment.dataset.root="/scratch/inf0/user/mparcham/ILSVRC2012/"
+        experiment.dataset.split="val_categorized"
+        experiment.dataset.batch_size=63
+        experiment.register_path=data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz
     )
 fi
 
@@ -169,4 +173,4 @@ fi
 ARGS+=( experiment.output_lid_file_path=$OUT_BASE )
 
 # Run your Python script; -u for unbuffered stdout
-python -u estimate_LID.py "${ARGS[@]}"
+python -u estimate_LID_flextok.py "${ARGS[@]}"

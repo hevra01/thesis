@@ -9,31 +9,15 @@ _target_: models.heuristic_token_count_predictor.HeuristicTokenCountPredictor
 # Input feature dimensionality
 # - 2 for [edge_ratio, vgg_error]
 # - 1 if only a single scalar feature is used
-in_dim: 2
+num_additional_features: 0
+num_classes: 256
+hidden_dim: 32
 
 # -----------------------------
-# MLP architecture
-hidden_dims: [64, 128, 180, 256]  # [] => no hidden layers
-activation: relu                               # relu | gelu | silu | tanh
-dropout: 0.1                                   # applied after each hidden layer (if any)
+# Input normalization options
+# use_log1p_recon: apply log(1 + x) to reconstruction loss to compress dynamic range
+# normalize_inputs: apply BatchNorm1d to all inputs for consistent scaling
+use_log1p_recon: true
+normalize_inputs: true
 
-# -----------------------------
-# Task mode
-# - regression: outputs a single value mapped by output_activation
-# - classification: outputs logits over num_classes
-mode: classification
-num_classes: 256  # only used if mode == classification
 
-# -----------------------------
-# Regression head controls (used when mode == regression)
-output_activation: sigmoid  # linear | sigmoid | relu | softplus
-output_min: 1.0             # used when output_activation == sigmoid (maps [0,1] -> [min,max])
-output_max: 256.0
-
-# -----------------------------
-# Input preprocessing
-# - use_log1p: apply log(1 + x) per feature (useful for heavy-tailed inputs)
-# - affine_preact: learnable per-feature scale and bias before the MLP
-# For the heuristic baseline we keep both disabled.
-use_log1p: false
-affine_preact: true

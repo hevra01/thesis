@@ -29,12 +29,12 @@ ARGS=(
 
     experiment.dataset.root=/scratch/inf0/user/mparcham/ILSVRC2012/
     experiment.dataset.split=val_categorized
-    experiment.dataset.batch_size=152
+    experiment.dataset.batch_size=4
 
     experiment.task=classification
     experiment.checkpoint_path=neural_baseline/checkpoint/predict_token_count/all.pt
 
-    experiment.reconstruction_dataset.batch_size=152
+    experiment.reconstruction_dataset.batch_size=4
 )
 
 python -m neural_baseline.eval "${ARGS[@]}"

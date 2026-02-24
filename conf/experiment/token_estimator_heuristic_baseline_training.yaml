@@ -1,81 +1,107 @@
+# =============================================================================
+# Heuristic Token Count Predictor Training Configuration
+# =============================================================================
+# This config is used by training_heuristic.py to train the HeuristicTokenCountPredictor.
+# The model predicts token counts from reconstruction loss + optional features (LID, density, etc.)
+# No images are used - only precomputed scalar features.
+
 defaults:
   - /model: token_predictor_heuristic_baseline
   - /dataset: imageNet
 
+# =============================================================================
+# Optimizer Configuration (single LR - no backbone/head split needed)
+# =============================================================================
 optimizer:
   _target_: torch.optim.Adam
   lr: 0.001
 
+# =============================================================================
+# Training Configuration
+# =============================================================================
 training:
-  num_epochs: 800
-  loss_training:
+  num_epochs: 100
+  loss_training_classification:
     _target_: reconstruction_loss.GaussianCrossEntropyLoss
-  loss_analysis:
-    _target_: reconstruction_loss.MAELoss
+    sigma: 0.2
 
-# ---------------------------------------------
-# Reconstruction dataset and feature toggles
-# ---------------------------------------------
+# =============================================================================
+# Reconstruction Dataset Configuration
+# =============================================================================
+# This dataset provides reconstruction loss and optional features per image.
+# No images are loaded - only tabular data from JSON files.
+
 reconstruction_dataset:
-  reconstruction_data_path: "data/datasets/reconstruction_loss_imgnet_train/reconstruction_errors_0000_0070.json"
-  batch_size: 120
-  shuffle: true
-  reconstruction_loss: "vgg_error"   # field name in reconstruction_data to use as the loss feature
+  # -----------------------------------------------------------------
+  # Reconstruction data paths (contain k_value, reconstruction losses, etc.)
+  # -----------------------------------------------------------------
+  reconstruction_train_data_path: "data/datasets/imagenet_reconstruction_losses/train/all_losses.json"
+  reconstruction_test_data_path: "data/datasets/imagenet_reconstruction_losses/val_categorized/all_losses.json"
 
-  # Feature toggles: enable/disable auxiliary features to concatenate with the reconstruction loss
-  use_edge_ratio: false
-  edge_ratio_path: "data/datasets/imageNet_edge_ratios/train_imageNet_edge_ratios.json"
+  # -----------------------------------------------------------------
+  # Primary reconstruction loss key (used as the main input feature)
+  # -----------------------------------------------------------------
+  reconstruction_loss: "LPIPS"
 
-  use_lid: true
-  lid_path: "data/datasets/imageNet_LID_values/training_set/all_lids.json"          # path to JSON (dict or list indexed by image_id)
+  # -----------------------------------------------------------------
+  # Additional feature keys to use as inputs to the MLP
+  # These must match the keys returned by ReconstructionDataset_Heuristic
+  # Options: "lid", "local_density", "edge_ratio", "lpips_variance", "dino_dist"
+  # Set to empty list [] if only using reconstruction_loss
+  # -----------------------------------------------------------------
+  additional_feature_keys:
+    - "lid"
+    - "local_density"
 
-  use_local_density: false
-  local_density_path: "data/datasets/density/train_imageNet_local_density.json"  # path to JSON (dict or list indexed by image_id)
+  # -----------------------------------------------------------------
+  # Feature file paths for TRAINING data
+  # Set to null if the feature is not used
+  # -----------------------------------------------------------------
+  edge_ratio_path: null
+  lid_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imageNet_LID_values/flextok_based/original_images/train/t_0.32/combined.json"
+  local_density_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/density_imagenet/original_train/unconditional/combined.json"
+  lpips_variance_path: null
+  dino_dist_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/dino_distances/train/dino_nearest_centroid_distances.json"
 
-  # Optional filtering of samples by an error metric
-  # filter:
-  #   key: vgg_error
-  #   min: 2.83040
-  #   max: 2.83640
+  # -----------------------------------------------------------------
+  # Feature file paths for VALIDATION data
+  # Set to null if the feature is not used
+  # -----------------------------------------------------------------
+  edge_ratio_path_val: null
+  lid_path_val: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imageNet_LID_values/flextok_based/original_images/val/t_0.32/combined.json"
+  local_density_path_val: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/density_imagenet/original_val/unconditional/combined.json"
+  lpips_variance_path_val: null
+  dino_dist_path_val: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/dino_distances/val_categorized/dino_nearest_centroid_distances_cosine.json"
 
-# ---------------------------------------------
-# Model overrides
-# Ensure in_dim equals 1 (recon loss) + sum(enabled auxiliary features)
-# With the defaults above (edge_ratio enabled only), in_dim = 2.
+  # -----------------------------------------------------------------
+  # DataLoader settings (can use large batch sizes since no images!)
+  # -----------------------------------------------------------------
+  batch_size: 512
+  num_workers: 4
+
+# =============================================================================
+# Model Configuration (overrides defaults from model config)
+# =============================================================================
 model:
-  mode: classification            # training uses GaussianCrossEntropyLoss
-  in_dim: 2                       # adjust to 1 + (use_edge_ratio) + (use_lid) + (use_local_density)
+  # Number of token count classes to predict
   num_classes: 256
-  # -----------------------------
-  # Preprocessing overrides (applied inside the model)
-  # We recommend signed log1p for heterogeneous ranges (e.g., LID can be negative and huge)
-  # Per-feature transform masks (length must equal in_dim). With current toggles, order is [mse_error, lid].
-  # Example: do not transform MSE (already small), use signed log for LID.
-  use_signed_log1p: [false, false]
-  standardize: true              # require per-feature mean/std below (length must equal in_dim)
-  # IMPORTANT: Order of features is exactly how the training script builds the tensor:
-  #   [ reconstruction_loss, (edge_ratio if enabled), (lid if enabled), (local_density if enabled) ]
-  # With the toggles above (use_lid: true, others false), the order is [mse_error, lid]
-  # Replace the placeholders with your precomputed stats after applying the same log policy.
-  
-  # if applying log:
-  # Mean VGG Error (signed log1p): 1.3205, Std VGG Error (signed log1p): 0.2188
-  # Mean MSE Error (signed log1p): 0.1973, Std MSE Error (signed log1p): 0.0612
-  
-  # if applying no log:
-  # Mean VGG Error before log: 2.8324, Std VGG Error before log: 0.7998
-  # Mean MSE Error before log: 0.2203, Std MSE Error before log: 0.0754
 
-  # Mean LID (signed log1p): -5541565.5392, Std LID (signed log1p): 708356.6451
+  # Must match len(additional_feature_keys) above
+  # If additional_feature_keys = ["lid", "local_density"], then num_additional_features = 2
+  num_additional_features: 2
 
-  standardize_mean: [2.8324, -5541565.5392]   # [mean_mse_error_after_log, mean_lid_after_log]
-  standardize_std:  [0.7998, 708356.6451]   # [std_mse_error_after_log,  std_lid_after_log]
+  # Hidden layer dimension
+  hidden_dim: 64
 
-checkpoint_path: "neural_baseline/checkpoint/heuristic_smallDatasdds_LID_mse_sdntsdszewest.pt"
+# =============================================================================
+# Experiment Metadata
+# =============================================================================
+experiment_name: "heuristic_token_count_predictor"
+project_name: "heuristic_baselines"
+group_name: "heuristic_experiments"
 
-dataset:
-  split: "train"
-
-experiment_name: "heuristic_AlllData_LID_vgg_no_log_high_lr"
-device: "cuda"
-
+# =============================================================================
+# Checkpoint Paths
+# =============================================================================
+checkpoint_path_best: "/BS/data_mani_compress/work/thesis/thesis/heuristic_baseline/checkpoint/lpips_best.pt"
+checkpoint_path_latest: "/BS/data_mani_compress/work/thesis/thesis/heuristic_baseline/checkpoint/lpips_latest.pt"

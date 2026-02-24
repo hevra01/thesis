@@ -1,4 +1,11 @@
 #!/bin/bash
+# This script is a Slurm job submission script for running a Python script on a cluster.
+
+
+# ---------------- Slurm job configuration ---------------- #
+# #SBATCH is a directive for Slurm to configure the job.
+# The lines below are Slurm directives that specify job parameters.
+
 
 
 #SBATCH --job-name lid_estimations       # Name of the job (shows up in squeue)
@@ -6,10 +13,10 @@
 #SBATCH --error logs/1err.txt         # Stderr log file (errors go here) (any errors or exceptions) go to logs/error_<jobid>.txt
 
 #SBATCH --partition gpu22              # Partition to submit to (e.g., gpu24 is H100, 80GB VRAM)
-#SBATCH --gres gpu:a40:1                   # Request 1 GPU
+#SBATCH --gres gpu:1                   # Request 1 GPU
 #SBATCH --mem 64G                      # Amount of RAM to allocate
 #SBATCH --cpus-per-task 4              # Number of CPU cores to allocate
-#SBATCH --time 0-03:00:00              # Max wall time for the job (2 days)
+#SBATCH --time 0-10:00:00              # Max wall time for the job (2 days)
 #SBATCH --nodes 1                      # Number of nodes (machines)
 #SBATCH --ntasks 1                     # Number of tasks (normally 1 for single GPU jobs)
 
@@ -31,25 +38,14 @@ source /BS/data_mani_compress/work/thesis/thesis/.wandb_secrets.sh
 # Move to your working directory (adjust this to where your code lives)
 cd /BS/data_mani_compress/work/thesis/thesis
 
-EXPERIMENT_NAME=${EXPERIMENT_NAME:-eval_neural_baseline}
-
 ARGS=(
-    experiment=$EXPERIMENT_NAME
-    experiment.experiment_name=normal_distro
-    experiment.project_name=neural_baseline_evaluation
-    experiment.group_name=conditional_Film_classification_dino_based_on_token_count
-
-    experiment.dataset.root=/scratch/inf0/user/mparcham/ILSVRC2012/
-    experiment.dataset.split=val_categorized
-    experiment.dataset.batch_size=1024
-
-    experiment.filter_based_on=k_value  # recon_loss or k_value. determines the filter_key.
-    experiment.model.task_type=classification
-    experiment.model.checkpoint_path=neural_baseline/checkpoint/predict_token_count_filM/dino_best.pt # predict_token_count for classification, predict_recon_loss for regression
-    
-    experiment.reconstruction_dataset.batch_size=64
-    experiment.reconstruction_dataset.reconstruction_loss_key="DINOv2FeatureLoss"
+  experiment=${EXPERIMENT_NAME:-estimate_reconstruction_loss}
+  experiment.reconstructed_data_path=/BS/data_mani_compress/work/thesis/imagenet_reconstructed_APC_true/val_categorized
+  experiment.reconstruction_loss_output_path=/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagenet_reconstruction_losses/val_categorized/all_APG_on.json
+  experiment.register_token_path="/BS/data_mani_compress/work/thesis/thesis/data/datasets/imagnet_register_tokens/imagnet_val_register_tokens.npz"
+  experiment.dataset.root="/scratch/inf0/user/mparcham/ILSVRC2012"
+  experiment.dataset.split="val_categorized"
+  "experiment.k_keep_list=[1, 2, 4, 8, 16, 32, 64, 128, 256]"
 )
-echo "ARGS: ${ARGS[@]}"
 
-python -m neural_baseline.eval "${ARGS[@]}"
+python find_reconstruction_loss.py "${ARGS[@]}"

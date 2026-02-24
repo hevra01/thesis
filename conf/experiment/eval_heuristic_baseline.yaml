@@ -1,0 +1,87 @@
+# =============================================================================
+# Evaluation Configuration for HeuristicTokenCountPredictor
+# =============================================================================
+# This config is used by heuristic_baseline/eval.py to evaluate the trained model.
+
+defaults:
+  - /model: token_predictor_heuristic_baseline
+  - /dataset: imageNet
+
+# =============================================================================
+# Device Configuration
+# =============================================================================
+device: "cuda:0"
+
+checkpoint_path: "data/checkpoints/heuristic_baselines/token_count_predictor/best_model.pt"
+# =============================================================================
+# Reconstruction Dataset Configuration
+# =============================================================================
+reconstruction_dataset:
+  # -----------------------------------------------------------------
+  # Validation data path
+  # -----------------------------------------------------------------
+  reconstruction_data_path: "data/datasets/imagenet_reconstruction_losses/val_categorized/all_losses.json"
+
+  # -----------------------------------------------------------------
+  # Primary reconstruction loss key
+  # -----------------------------------------------------------------
+  reconstruction_loss: "LPIPS"
+
+  # -----------------------------------------------------------------
+  # Additional feature keys (must match training config)
+  # -----------------------------------------------------------------
+  additional_feature_keys:
+    - "lid"
+    - "local_density"
+
+  # -----------------------------------------------------------------
+  # Feature file paths for validation data
+  # -----------------------------------------------------------------
+  edge_ratio_path: null
+  lid_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/imageNet_LID_values/flextok_based/original_images/val/t_0.32/combined.json"
+  local_density_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/density_imagenet/original_val/unconditional/combined.json"
+  lpips_variance_path: null
+  dino_dist_path: "/BS/data_mani_compress/work/thesis/thesis/data/datasets/dino_distances/val_categorized/dino_nearest_centroid_distances_cosine.json"
+
+  # -----------------------------------------------------------------
+  # DataLoader settings
+  # -----------------------------------------------------------------
+  batch_size: 512
+  num_workers: 4
+
+  # -----------------------------------------------------------------
+  # Evaluation settings
+  # -----------------------------------------------------------------
+  # Evaluate per token count class
+  eval_per_class: true
+
+  # Evaluate by reconstruction loss ranges
+  eval_by_recon_loss_ranges: true
+  filter_key: "LPIPS"
+  recon_loss_ranges:
+    - 0.02079272
+    - 0.12662399
+    - 0.23245525
+    - 0.33828652
+    - 0.44411778
+    - 0.54994905
+    - 0.65578032
+    - 0.76161158
+    - 0.86744285
+    - 0.97327411
+    - 1.07910538
+
+# =============================================================================
+# Model Configuration (must match training config)
+# =============================================================================
+model:
+  num_classes: 256
+  num_additional_features: 2
+  hidden_dim: 64
+
+# =============================================================================
+# Experiment Metadata
+# =============================================================================
+experiment_name: "eval_heuristic_token_count_predictor"
+project_name: "heuristic_baselines"
+group_name: "heuristic_evaluation"
