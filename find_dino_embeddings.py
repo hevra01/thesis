@@ -86,7 +86,7 @@ def parse_args():
     parser.add_argument(
         "--out_dir",
         type=str,
-        default="data/datasets/dino_embeddings/val_categorized",
+        default="data/datasets/dino_embeddings/train",
         help="Output directory to save computed DINO embeddings.",
     )
     parser.add_argument(
@@ -111,7 +111,7 @@ def main():
     # 1) Instantiate the ImageNet val dataloader
     # ---------------------------------------------------------------------
     imagenet_val = get_imagenet_dataloader(
-        split="val_categorized",
+        split="train",
         batch_size=args.batch_size,
         shuffle=False,
     )

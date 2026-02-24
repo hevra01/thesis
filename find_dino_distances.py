@@ -173,6 +173,41 @@ def compute_nearest_centroid_distances(
     return dist
 
 
+def save_nearest_centroid_distances(
+    all_distances: torch.Tensor,   # [N, K]
+    output_path: str,
+    distance_metric: str = "cosine",
+):
+    """
+    Save only nearest-centroid distance and index for each image.
+
+    Args:
+        all_distances:   Tensor [N, K], distances[i, j] = distance(image_i, centroid_j)
+        output_path:     Path where output will be saved (.pt format).
+        distance_metric: 'euclidean' or 'cosine'
+    """
+    all_distances = all_distances.cpu()
+    N, K = all_distances.shape
+
+    print(f"Computing nearest centroid for {N} images from {K} centroids...")
+
+    # Only compute nearest-centroid info (minimal memory)
+    min_distances, min_indices = torch.min(all_distances, dim=1)  # [N]
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    # Save as compact .pt file
+    torch.save({
+        "num_images": N,
+        "num_centroids": K,
+        "distance_metric": distance_metric,
+        "nearest_distances": min_distances,  # [N]
+        "nearest_indices": min_indices,       # [N]
+    }, output_path)
+
+    print(f"Saved nearest centroid distances to {output_path}")
+
+
 def save_all_centroid_distances_to_json(
     all_distances: torch.Tensor,   # [N, K]
     output_path: str,
@@ -228,7 +263,7 @@ def parse_args():
     parser.add_argument(
         "--dinov2_feature_dir",
         type=str,
-        default="data/datasets/dino_embeddings/val_categorized/dino_features.pt",
+        default="data/datasets/dino_embeddings/train/dino_features.pt",
         help="dino features are pre-computed.",
     )
     parser.add_argument(
@@ -247,8 +282,19 @@ def parse_args():
     parser.add_argument(
         "--output_json",
         type=str,
-        default="data/datasets/dino_embeddings/val_categorizedoutputs/dino_all_centroid_distances_cosine.json",
+        default="data/datasets/dino_distances/train/dino_all_centroid_distances_cosine.json",
         help="Where to save the JSON with distances.",
+    )
+    parser.add_argument(
+        "--output_pt",
+        type=str,
+        default="data/datasets/dino_distances/train/dino_nearest_centroid_distances.pt",
+        help="Where to save the .pt file with nearest distances only.",
+    )
+    parser.add_argument(
+        "--save_all",
+        action="store_true",
+        help="If set, save all centroid distances (memory-intensive). Otherwise, save only nearest.",
     )
     return parser.parse_args()
 
@@ -276,13 +322,20 @@ def main():
     )
 
     # ---------------------------------------------------------------------
-    # 6) Save results to JSON
+    # 6) Save results
     # ---------------------------------------------------------------------
-    save_all_centroid_distances_to_json(
-        all_distances=dist,
-        output_path=args.output_json,
-        distance_metric=args.distance_metric,
-    )
+    if args.save_all:
+        save_all_centroid_distances_to_json(
+            all_distances=dist,
+            output_path=args.output_json,
+            distance_metric=args.distance_metric,
+        )
+    else:
+        save_nearest_centroid_distances(
+            all_distances=dist,
+            output_path=args.output_pt,
+            distance_metric=args.distance_metric,
+        )
 
 
 if __name__ == "__main__":
