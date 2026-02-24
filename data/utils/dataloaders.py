@@ -230,12 +230,16 @@ class ReconstructionDataset_Heuristic(Dataset):
     """
     this is different from ReconstructionDataset_token_based in the sense that this also has the edge information.
     Optionally, it can include additional per-image scalar features such as LID and local density.
+    Supports optional filtering by reconstruction loss range.
     """
     def __init__(self, reconstruction_data, edge_ratio_information=None,
                  lid_information=None, local_density_information=None,
                  lpips_variance_information=None,
                  dino_dist_information=None,
-                 error_key: list[str] = ["vgg_error"]):
+                 error_key: list[str] = ["vgg_error"],
+                 filter_key: str | None = None,
+                 min_error: float | None = None,
+                 max_error: float | None = None):
         """
         Args:
             reconstruction_data (list): List of dicts containing reconstruction metrics.
@@ -243,19 +247,50 @@ class ReconstructionDataset_Heuristic(Dataset):
             edge_ratio_information (list|dict|None): Per-image edge ratio values.
             lid_information (list|dict|None): Per-image LID values.
             local_density_information (list|dict|None): Per-image local density values.
-            error_key (str): Name of the error field in reconstruction_data to expose in samples.
+            lpips_variance_information (list|dict|None): Per-image LPIPS variance values.
+            dino_dist_information (list|dict|None): Per-image DINO distance values.
+            error_key (list[str]): Names of the error fields in reconstruction_data to expose in samples.
+            filter_key (str|None): Which error field to filter on (e.g., "LPIPS" or "mse_error"). If None, no filtering.
+            min_error (float|None): Keep samples with error >= min_error (if provided).
+            max_error (float|None): Keep samples with error <= max_error (if provided).
         """
-        self.reconstruction_data = reconstruction_data
         self.edge_ratio_information = edge_ratio_information
         self.lid_information = lid_information
         self.local_density_information = local_density_information
         self.lpips_variance_information = lpips_variance_information
         self.dino_dist_information = dino_dist_information
+        self.error_key = error_key
 
         # Apply optional filtering on the provided error field
         self.num_original = len(reconstruction_data)
-        self.reconstruction_data = reconstruction_data
-        self.error_key = error_key
+        if filter_key is not None and (min_error is not None or max_error is not None):
+            lo = float(min_error) if min_error is not None else float("-inf")
+            hi = float(max_error) if max_error is not None else float("inf")
+            filtered = []
+            missing_key = 0
+            for d in reconstruction_data:
+                if filter_key not in d:
+                    missing_key += 1
+                    continue
+                v = d[filter_key]
+                # tolerate nested structures but we expect scalars
+                try:
+                    val = float(v)
+                except (TypeError, ValueError):
+                    continue
+                if lo <= val <= hi:
+                    filtered.append(d)
+            self.reconstruction_data = filtered
+            self.filter_key = filter_key
+            self.filter_bounds = (lo, hi)
+            self.missing_key_count = missing_key
+        else:
+            self.reconstruction_data = reconstruction_data
+            self.filter_key = None
+            self.filter_bounds = None
+            self.missing_key_count = 0
+
+        self.num_kept = len(self.reconstruction_data)
 
     def __len__(self):
         return len(self.reconstruction_data)
@@ -287,5 +322,5 @@ class ReconstructionDataset_Heuristic(Dataset):
         if self.lpips_variance_information is not None:
             out["lpips_variance"] = self.lpips_variance_information[k_value][image_id]
         if self.dino_dist_information is not None:
-            out["dino_dist"] = self.dino_dist_information[image_id]
+            out["dino_dist"] = self.dino_dist_information["images"][image_id]["dino_distance"] 
         return out
