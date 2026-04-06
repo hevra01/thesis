@@ -337,39 +337,46 @@ class GaussianCrossEntropyLoss(nn.Module):
        Classes near the true one get higher probability; far ones get near-zero.
 
     Args:
-        num_classes (int): number of classes (e.g., 256)
-        sigma (float): stddev of the Gaussian over class index space
+        num_classes (int): number of classes
+        sigma (float): stddev of the Gaussian over class value space
+        class_values (list): actual token count values for each class, e.g.
+            [1, 2, 4, 8, 16, 32, 64, 128, 256]. Distances are computed in
+            value-space, so this must match the discrete token counts in the data.
+            Defaults to [1, 2, 4, 8, 16, 32, 64, 128, 256].
     """
-    def __init__(self, num_classes: int = 256, sigma: float = 2.0):
+    def __init__(self, num_classes: int = 9, sigma: float = 2.0,
+                 class_values: list = None):
         super().__init__()
         self.num_classes = num_classes
         self.sigma = float(sigma)
+        if class_values is None:
+            class_values = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+        self.register_buffer(
+            "class_values",
+            torch.tensor(class_values, dtype=torch.float32).view(1, -1),
+        )
 
 
     @torch.no_grad()
     def _soft_targets(self, token_counts: torch.Tensor) -> torch.Tensor:
         """
-        token_counts: [B] integer labels in [1..C], where B is the batch size.
-                      so token_count basically holds the true number of tokens 
-                      used for reconstruction.
+        token_counts: [B] integer token count labels (e.g. 1, 4, 16, 256).
 
-        The aim is to turn these integer labels into soft targets.               
-        
-        
+        Builds a Gaussian soft-target distribution over the discrete class values.
+        Distances are computed in value-space (not index-space), so e.g. the
+        distance between class 128 and class 256 is 128, not 1.
+
         Broadcasting explanation:
-            - centers: [B,1] (true counts for each example)
-            - classes: [1,C] (all possible counts)
-            - classes - centers triggers broadcasting:
-                PyTorch automatically expands centers to [B,C] 
-                and classes to [B,C], then performs element-wise subtraction.
+            - centers: [B,1] (true token count for each example)
+            - classes: [1,C] (actual token count values for each class)
+            - classes - centers triggers broadcasting → shape [B,C]
         """
 
         # Step 1: Convert labels to column vector [B,1] and float
-        centers = token_counts.view(-1, 1).float()  
+        centers = token_counts.view(-1, 1).float()
 
-        # Step 2: Row vector of class indices [1,C]
-        # this is just all the possible classes/token counts
-        classes = torch.arange(1, self.num_classes + 1, device=token_counts.device).view(1, -1)  
+        # Step 2: Row vector of actual class values [1,C]
+        classes = self.class_values.to(token_counts.device)  # [1, C]
 
         # Step 3: Squared distance from true count (broadcasting happens here)
         dist2 = (classes - centers).pow(2)  # shape [B,C] due to broadcasting

@@ -45,6 +45,7 @@ ARGS=(
 
     experiment.filter_based_on=k_value  # recon_loss or k_value. determines the filter_key.
     experiment.model.task_type=classification
+    experiment.model.num_classes=9
     experiment.model.checkpoint_path=neural_baseline/checkpoint/predict_token_count_filM/dino_best.pt # predict_token_count for classification, predict_recon_loss for regression
     
     experiment.reconstruction_dataset.batch_size=64

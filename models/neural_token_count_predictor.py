@@ -646,6 +646,8 @@ class NeuralTokenCountPredictor(nn.Module):
     @staticmethod
     def logits_to_token_count(logits: torch.Tensor) -> torch.Tensor:
         """
-        Convert logits to predicted token count in [1..num_classes].
+        Convert logits to predicted token count in {1,2,4,8,16,32,64,128,256}.
         """
-        return logits.argmax(dim=1) + 1
+        k_values_t = torch.tensor([1, 2, 4, 8, 16, 32, 64, 128, 256],
+                                   dtype=torch.long, device=logits.device)
+        return k_values_t[logits.argmax(dim=1)]

@@ -10,7 +10,7 @@ _target_: models.heuristic_token_count_predictor.HeuristicTokenCountPredictor
 # - 2 for [edge_ratio, vgg_error]
 # - 1 if only a single scalar feature is used
 num_additional_features: 0
-num_classes: 256
+num_classes: 9
 hidden_dim: 32
 
 # -----------------------------

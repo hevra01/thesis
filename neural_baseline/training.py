@@ -14,6 +14,17 @@ from hydra.utils import instantiate
 from typing import Dict, List, Tuple
 
 
+# Valid discrete token counts and index mapping
+K_VALUES = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+
+def token_to_idx(k_int: torch.Tensor) -> torch.Tensor:
+    """Map token counts {1,2,4,8,...,256} → 0-based class indices {0,...,8}."""
+    lut = torch.full((257,), -1, dtype=torch.long, device=k_int.device)
+    for i, v in enumerate(K_VALUES):
+        lut[v] = i
+    return lut[k_int.long()]
+
+
 # ------------------------------
 # Distributed utilities (DDP)
 # ------------------------------
@@ -257,9 +268,8 @@ def save_checkpoint(path, epoch_next, model, optimizer, avg_loss):
 
 
 def compute_hard_nll_mean(logits: torch.Tensor, k_int: torch.Tensor) -> torch.Tensor:
-    C = logits.size(1)
     log_p = F.log_softmax(logits, dim=1)
-    idx = (k_int - 1).clamp(0, C - 1).view(-1, 1)
+    idx = token_to_idx(k_int).view(-1, 1)
     hard_nll = -log_p.gather(1, idx).squeeze(1)
     return hard_nll.mean()
 
@@ -400,7 +410,7 @@ def validate_one_epoch(model, dataloader, device, recon_loss_key, num_classes, t
 
                 # use hard CE for validation
                 C = logits.size(1)
-                target_idx = (k_int - 1).clamp(0, C - 1)
+                target_idx = token_to_idx(k_int)
                 ce_mean = F.cross_entropy(logits, target_idx, reduction="mean")
 
                 hard_nll_mean = compute_hard_nll_mean(logits, k_int)

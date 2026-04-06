@@ -28,33 +28,43 @@ import wandb
 from data.utils.dataloaders import ReconstructionDataset_Heuristic
 
 
+# Valid discrete token counts and index mapping
+K_VALUES = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+
+def token_to_idx(k_int: torch.Tensor) -> torch.Tensor:
+    """Map token counts {1,2,4,8,...,256} → 0-based class indices {0,...,8}."""
+    lut = torch.full((257,), -1, dtype=torch.long, device=k_int.device)
+    for i, v in enumerate(K_VALUES):
+        lut[v] = i
+    return lut[k_int.long()]
+
+
 # =============================================================================
 # Evaluation Metrics
 # =============================================================================
 
 def compute_hard_nll_mean(logits: torch.Tensor, k_int: torch.Tensor) -> torch.Tensor:
     """Compute mean negative log-likelihood for hard class labels."""
-    C = logits.size(1)
     log_p = F.log_softmax(logits, dim=1)
-    # k_int is in [1..C], convert to 0-indexed
-    idx = (k_int - 1).clamp(0, C - 1).view(-1, 1)
+    idx = token_to_idx(k_int).view(-1, 1)
     hard_nll = -log_p.gather(1, idx).squeeze(1)
     return hard_nll.mean()
 
 
 def compute_mean_absolute_error_classes(logits: torch.Tensor, k_int: torch.Tensor) -> float:
     """
-    Compute mean absolute error between predicted and true class indices.
-    
+    Compute mean absolute error between predicted and true token counts.
+
     Args:
         logits: Model output logits [B, num_classes]
-        k_int: Ground truth token counts [B], values in [1..C]
-    
+        k_int: Ground truth token counts [B], values in {1,2,4,8,16,32,64,128,256}
+
     Returns:
-        MAE of class predictions
+        MAE of token count predictions
     """
-    preds = logits.argmax(dim=1) + 1  # Convert 0-indexed to 1-indexed
-    mae = (preds - k_int).abs().float().mean().item()
+    k_values_t = torch.tensor(K_VALUES, dtype=torch.long, device=logits.device)
+    preds = k_values_t[logits.argmax(dim=1)]  # [B], values in K_VALUES
+    mae = (preds - k_int.long()).abs().float().mean().item()
     return mae
 
 
@@ -245,8 +255,8 @@ def evaluate_per_class(
     """
     model.eval()
 
-    # Per-class accumulators
-    class_metrics = {c: {"nll_sum": 0.0, "correct": 0, "count": 0} for c in range(1, num_classes + 1)}
+    # Per-class accumulators (keyed by actual token count values, not indices)
+    class_metrics = {c: {"nll_sum": 0.0, "correct": 0, "count": 0} for c in K_VALUES}
 
     for batch in dataloader:
         recon_loss = batch[recon_loss_key].to(device, non_blocking=True).float()
@@ -267,11 +277,12 @@ def evaluate_per_class(
 
         # Forward pass
         logits = model(recon_loss, additional_features)
-        preds = logits.argmax(dim=1) + 1
+        k_values_t = torch.tensor(K_VALUES, dtype=torch.long, device=logits.device)
+        preds = k_values_t[logits.argmax(dim=1)]  # [B], values in K_VALUES
         log_p = F.log_softmax(logits, dim=1)
 
         # Accumulate per-class metrics
-        for c in range(1, num_classes + 1):
+        for i, c in enumerate(K_VALUES):
             mask = (k_value == c)
             if mask.sum() == 0:
                 continue
@@ -279,14 +290,13 @@ def evaluate_per_class(
             class_metrics[c]["count"] += int(mask.sum().item())
             class_metrics[c]["correct"] += int((preds[mask] == c).sum().item())
 
-            # NLL for this class
-            idx = (c - 1)  # 0-indexed
-            nll_c = -log_p[mask, idx].sum().item()
+            # NLL for this class (i is the correct 0-based index for class c)
+            nll_c = -log_p[mask, i].sum().item()
             class_metrics[c]["nll_sum"] += nll_c
 
     # Compute averages
     results = {}
-    for c in range(1, num_classes + 1):
+    for c in K_VALUES:
         cnt = class_metrics[c]["count"]
         if cnt > 0:
             results[c] = {

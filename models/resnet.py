@@ -88,7 +88,11 @@ class ResNetCond(nn.Module):
         elif task_type == "classification":
             if num_classes is None:
                 raise ValueError("num_classes must be provided for classification task")
-            self.head = nn.Linear(in_dim, num_classes)
+            self.head = nn.Sequential(
+                nn.Linear(in_dim, 256),
+                nn.ReLU(),
+                nn.Linear(256, num_classes),
+            )
         else:
             raise ValueError(f"Unknown task: {task_type}")
 

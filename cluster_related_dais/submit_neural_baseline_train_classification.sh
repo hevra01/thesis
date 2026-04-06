@@ -2,7 +2,7 @@
 #SBATCH -J neural_baseline_train
 #SBATCH -o /dais/u/hevrapetek/thesis_outer/thesis/logs/current.out
 #SBATCH -e /dais/u/hevrapetek/thesis_outer/thesis/logs/current.err
-#SBATCH --time=0-1:40:00 # was 3:40 
+#SBATCH --time=0-2:30:00 # was 3:40 
 #SBATCH --nodes=1
 #SBATCH --mem=500GB
 #SBATCH --gres=gpu:h200:4
@@ -69,11 +69,11 @@ ARGS=(
      experiment.reconstruction_dataset.filter_key=null
 
 	   experiment.project_name=neural_baselines_classification_token_count_prediction
-     experiment.experiment_name="classification_train_val_${SIGMA}"
-     experiment.group_name="dino_all_finetune_resnet_filM_sigma${SIGMA}"
+     experiment.experiment_name="classification_train_val_${SIGMA}_extra_layer"
+     experiment.group_name="dino_all_finetune_resnet_filM_sigma${SIGMA}_extra_layer"
      
-     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_token_count_filM/dino_best.pt"
-     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_token_count_filM/dino_latest.pt"
+     experiment.checkpoint_path_best="neural_baseline/checkpoint/predict_token_count_filM/dino_best_extra_layer.pt"
+     experiment.checkpoint_path_latest="neural_baseline/checkpoint/predict_token_count_filM/dino_latest_extra_layer.pt"
      
      experiment.training.loss_training_classification.sigma=${SIGMA}
      experiment.task_type=classification

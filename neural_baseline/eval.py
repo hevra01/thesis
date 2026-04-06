@@ -23,10 +23,20 @@ from data.utils.dataloaders import ReconstructionDataset_Neural
 import wandb
 
 
+# Valid discrete token counts and index mapping
+K_VALUES = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+
+def token_to_idx(k_int: torch.Tensor) -> torch.Tensor:
+    """Map token counts {1,2,4,8,...,256} → 0-based class indices {0,...,8}."""
+    lut = torch.full((257,), -1, dtype=torch.long, device=k_int.device)
+    for i, v in enumerate(K_VALUES):
+        lut[v] = i
+    return lut[k_int.long()]
+
+
 def compute_hard_nll_mean(logits: torch.Tensor, k_int: torch.Tensor) -> torch.Tensor:
-    C = logits.size(1)
     log_p = F.log_softmax(logits, dim=1)
-    idx = (k_int - 1).clamp(0, C - 1).view(-1, 1)
+    idx = token_to_idx(k_int).view(-1, 1)
     hard_nll = -log_p.gather(1, idx).squeeze(1)
     return hard_nll.mean()
 
@@ -36,6 +46,7 @@ def main(cfg: DictConfig):
 
     run = wandb.init(
             name=cfg.experiment.experiment_name,
+            group=cfg.experiment.group_name,
             project=cfg.experiment.project_name,
             config=OmegaConf.to_container(cfg, resolve=True),
         )
@@ -50,18 +61,18 @@ def main(cfg: DictConfig):
     base_dataloader = instantiate(cfg.experiment.dataset)
     model = instantiate(cfg.experiment.model).to(device).eval()
 
-    task = cfg.experiment.task  # either "classification" or "regression"
-
-    if task == "classification":
-        filter_key = cfg.experiment.reconstruction_dataset.filter_key_classification
-        filter_range = cfg.experiment.reconstruction_dataset.recon_loss_ranges_classification
-        skip_range = cfg.experiment.reconstruction_dataset.skip_range_classification
-    elif task == "regression":
-        filter_key = cfg.experiment.reconstruction_dataset.filter_key_regression
-        filter_range = cfg.experiment.reconstruction_dataset.recon_loss_ranges_regression
-        skip_range = cfg.experiment.reconstruction_dataset.skip_range_regression
+    filter_based_on = cfg.experiment.filter_based_on  # either "classification" or "regression"
+    task_type = cfg.experiment.model.task_type  # either "classification" or "regression"
+    if filter_based_on == "recon_loss":
+        filter_key = cfg.experiment.reconstruction_dataset.filter_key_recon_loss
+        filter_range = cfg.experiment.reconstruction_dataset.recon_loss_ranges_recon_loss
+        skip_range = cfg.experiment.reconstruction_dataset.skip_range_recon_loss
+    elif filter_based_on == "k_value":
+        filter_key = cfg.experiment.reconstruction_dataset.filter_key_k_value
+        filter_range = cfg.experiment.reconstruction_dataset.recon_loss_ranges_k_value
+        skip_range = cfg.experiment.reconstruction_dataset.skip_range_k_value
     else:
-        raise ValueError(f"Unknown task: {task}")
+        raise ValueError(f"Unknown task: {filter_based_on}")
 
     # this will either be used to fetch the recon loss that is to be predicted
     # or it will be used as a condition to predict the token count class.
@@ -74,7 +85,7 @@ def main(cfg: DictConfig):
 
     for current_range in range(0, len(filter_range) - 1, skip_range):
         min_error, max_error = filter_range[current_range], filter_range[current_range + 1]
-        print(f"Evaluating for ranges for {task}: [{min_error}, {max_error}]")
+        print(f"Evaluating for ranges for {filter_based_on}: [{min_error}, {max_error}]")
 
         # since we are evaluating the model performance for specific reconstruction loss ranges,
         # we create a new dataset that filters the images based on the current reconstruction loss range.
@@ -89,7 +100,7 @@ def main(cfg: DictConfig):
 
         recon_dataloader = torch.utils.data.DataLoader(recon_dataset, batch_size=cfg.experiment.reconstruction_dataset.batch_size, shuffle=False)
 
-        if task == "classification":
+        if task_type == "classification":
             # Evaluate classification performance (predicting token count)
 
             hard_nll_mean = 0.0
@@ -107,7 +118,7 @@ def main(cfg: DictConfig):
             hard_nll_mean /= len(recon_dataloader)
             print(f"Hard NLL Mean (Classification Task) for {min_error}-{max_error}: {hard_nll_mean.item():.4f}")
 
-        elif task == "regression":
+        elif task_type == "regression":
             # Evaluate regression performance
             mae_loss_fn = torch.nn.L1Loss(reduction='mean')
             mae_mean = 0.0
@@ -128,7 +139,7 @@ def main(cfg: DictConfig):
             mae_mean /= len(recon_dataloader)
             print(f"MAE Mean (Regression Task) for {min_error}-{max_error}: {mae_mean:.4f}")
         else:
-            raise ValueError(f"Unknown task: {task}")
+            raise ValueError(f"Unknown task: {filter_based_on}")
         
 
 if __name__ == "__main__":

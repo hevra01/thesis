@@ -34,7 +34,7 @@ post_conv_pool: flatten                 # none | gap | flatten
 
 # --- Task ---
 head: "classification"               # classification | regression
-num_classes: 256                     # for classification: predict counts in {1..256}. for regression: predicts only 1 class
+num_classes: 9                       # for classification: predict counts in {1,2,4,8,16,32,64,128,256}. for regression: predicts only 1 class
 
 
 # --- Fully-connected head (regression) ---

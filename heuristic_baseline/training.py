@@ -29,6 +29,17 @@ import wandb
 from data.utils.dataloaders import ReconstructionDataset_Heuristic
 
 
+# Valid discrete token counts and index mapping
+K_VALUES = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+
+def token_to_idx(k_int: torch.Tensor) -> torch.Tensor:
+    """Map token counts {1,2,4,8,...,256} → 0-based class indices {0,...,8}."""
+    lut = torch.full((257,), -1, dtype=torch.long, device=k_int.device)
+    for i, v in enumerate(K_VALUES):
+        lut[v] = i
+    return lut[k_int.long()]
+
+
 # =============================================================================
 # Distributed Utilities (simplified from neural_baseline)
 # =============================================================================
@@ -70,10 +81,8 @@ def setup_distributed_and_device():
 
 def compute_hard_nll_mean(logits: torch.Tensor, k_int: torch.Tensor) -> torch.Tensor:
     """Compute mean negative log-likelihood for hard class labels."""
-    C = logits.size(1)
     log_p = F.log_softmax(logits, dim=1)
-    # k_int is in [1..C], convert to 0-indexed
-    idx = (k_int - 1).clamp(0, C - 1).view(-1, 1)
+    idx = token_to_idx(k_int).view(-1, 1)
     hard_nll = -log_p.gather(1, idx).squeeze(1)
     return hard_nll.mean()
 
@@ -402,8 +411,9 @@ def validate_one_epoch(
             hard_nll = compute_hard_nll_mean(logits, k_float)
             nll_sum += float(hard_nll.item()) * bs
 
-            # Accuracy (predicted class vs true class)
-            preds = logits.argmax(dim=1) + 1  # Convert 0-indexed to 1-indexed
+            # Accuracy (predicted token count vs true token count)
+            k_values_t = torch.tensor(K_VALUES, dtype=k_value.dtype, device=logits.device)
+            preds = k_values_t[logits.argmax(dim=1)]
             correct += (preds == k_value).sum().item()
 
     return {
