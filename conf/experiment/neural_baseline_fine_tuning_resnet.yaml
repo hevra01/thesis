@@ -28,7 +28,7 @@ optimizer_lr:
 
 training:
     num_epochs: 100
-    loss_training_classification: 
+    loss_training_classification:
       _target_: reconstruction_loss.GaussianCrossEntropyLoss
       sigma: 0.2
     loss_training_regression: 

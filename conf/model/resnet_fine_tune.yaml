@@ -2,7 +2,7 @@ _target_: models.resnet.ResNetCond
 
 # Number of classes for the classifier.
 # Set to 1000 for ImageNet; adjust as needed.
-num_classes: 256
+num_classes: 9
 
 # Torchvision ResNet backbone to use.
 # Options include: resnet18, resnet34, resnet50, resnet101, resnet152.
