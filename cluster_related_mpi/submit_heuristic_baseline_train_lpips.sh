@@ -50,7 +50,7 @@ NUM_GPUS=${SLURM_GPUS_ON_NODE:-1}
 # Training Configuration
 # =============================================================================
 SIGMA=0.2
-RECON_LOSS_KEY="DINOv2FeatureLoss"
+RECON_LOSS_KEY="LPIPS"
 
 # --- Arguments for Hydra / Python module ---
 ARGS=(
@@ -74,28 +74,28 @@ ARGS=(
     experiment.reconstruction_dataset.reconstruction_loss="${RECON_LOSS_KEY}"
     experiment.reconstruction_dataset.batch_size=1024
     experiment.reconstruction_dataset.num_workers=4
-    experiment.reconstruction_dataset.additional_feature_keys='["dino_dist"]' #'["lid", "local_density"]' or '["dino_dist"]'
+    experiment.reconstruction_dataset.additional_feature_keys='["lid", "local_density"]' #'["lid", "local_density"]' or '["dino_dist"]'
 
 
     # -----------------------------------------------------------------
     # Model settings
     # -----------------------------------------------------------------
-    experiment.model.num_classes=256
-    experiment.model.num_additional_features=1
+    experiment.model.num_classes=9
+    experiment.model.num_additional_features=2
     experiment.model.hidden_dim=64
 
     # -----------------------------------------------------------------
     # Experiment metadata
     # -----------------------------------------------------------------
     experiment.project_name="heuristic_baselines_classification"
-    experiment.experiment_name="heuristic_${RECON_LOSS_KEY}_sigma${SIGMA}_with_normalization_dino_dist"
-    experiment.group_name="heuristic_token_prediction"
+    experiment.experiment_name="heuristic_${RECON_LOSS_KEY}_sigma${SIGMA}_with_normalization_lpips_fix_class_count"
+    experiment.group_name="heuristic_token_prediction_fix_class_count"
 
     # -----------------------------------------------------------------
     # Checkpoint paths
     # -----------------------------------------------------------------
-    experiment.checkpoint_path_best="/BS/data_mani_compress/work/thesis/thesis/heuristic_baseline/checkpoint/${RECON_LOSS_KEY}_with_normalization_64best_recon_loss_dino_dist.pt"
-    experiment.checkpoint_path_latest="/BS/data_mani_compress/work/thesis/thesis/heuristic_baseline/checkpoint/${RECON_LOSS_KEY}_with_normalization_64latest_recon_loss_dino_dist.pt"
+    experiment.checkpoint_path_best="/BS/data_mani_compress/work/thesis/thesis/heuristic_baseline/checkpoint/${RECON_LOSS_KEY}_with_normalization_64best_recon_loss_lpips_fix_class_count.pt"
+    experiment.checkpoint_path_latest="/BS/data_mani_compress/work/thesis/thesis/heuristic_baseline/checkpoint/${RECON_LOSS_KEY}_with_normalization_64latest_recon_loss_lpips_fix_class_count.pt"
 )
 
 # (Optional) print final args for debugging

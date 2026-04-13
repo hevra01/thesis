@@ -37,7 +37,7 @@ ARGS=(
     experiment=$EXPERIMENT_NAME
     experiment.experiment_name=normal_distro
     experiment.project_name=neural_baseline_evaluation
-    experiment.group_name=conditional_Film_classification_dino_based_on_token_count
+    experiment.group_name=conditional_Film_classification_lpips_based_on_token_count_extra_layer
 
     experiment.dataset.root=/scratch/inf0/user/mparcham/ILSVRC2012/
     experiment.dataset.split=val_categorized
@@ -46,10 +46,10 @@ ARGS=(
     experiment.filter_based_on=k_value  # recon_loss or k_value. determines the filter_key.
     experiment.model.task_type=classification
     experiment.model.num_classes=9
-    experiment.model.checkpoint_path=neural_baseline/checkpoint/predict_token_count_filM/dino_best.pt # predict_token_count for classification, predict_recon_loss for regression
+    experiment.model.checkpoint_path=neural_baseline/checkpoint/predict_token_count_filM/lpips_best_extra_layer.pt # predict_token_count for classification, predict_recon_loss for regression
     
     experiment.reconstruction_dataset.batch_size=64
-    experiment.reconstruction_dataset.reconstruction_loss_key="DINOv2FeatureLoss"
+    experiment.reconstruction_dataset.reconstruction_loss_key="LPIPS"
 )
 echo "ARGS: ${ARGS[@]}"
 

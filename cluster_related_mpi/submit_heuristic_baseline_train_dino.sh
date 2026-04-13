@@ -1,21 +1,20 @@
 #!/bin/bash
-# filepath: /BS/data_mani_compress/work/thesis/thesis/cluster_related_mpi/submit_eval_heuristic_baseline.sh
 # =============================================================================
-# Slurm job submission script for HeuristicTokenCountPredictor evaluation
+# Slurm job submission script for HeuristicTokenCountPredictor training
 # =============================================================================
-# This script evaluates a trained lightweight MLP that predicts token counts from:
+# This script trains a lightweight MLP that predicts token counts from:
 #   - Reconstruction loss (e.g., LPIPS)
 #   - Optional features: LID, local_density, etc.
 # No images are loaded - only precomputed scalar features.
 
 # ---------------- Slurm job configuration ---------------- #
-#SBATCH --job-name eval_heuristic_baseline
-#SBATCH --output logs/eval_heuristic_baseline_output.txt
-#SBATCH --error logs/eval_heuristic_baseline_error.txt
+#SBATCH --job-name heuristic_baseline
+#SBATCH --output logs/heuristic_baseline_output.txt
+#SBATCH --error logs/heuristic_baseline_error.txt
 
 #SBATCH --partition gpu22
 #SBATCH --gres gpu:a40:1                   # Only 1 GPU needed for lightweight MLP
-#SBATCH --time=0-0:30:00                   # Short time - evaluation is fast
+#SBATCH --time=0-2:00:00                   # Shorter time - MLP trains fast
 #SBATCH --nodes 1
 
 # ---------------- Setup runtime environment ---------------- #
@@ -37,57 +36,66 @@ cd /BS/data_mani_compress/work/thesis/thesis
 
 # Helpful runtime env for performance/stability
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-8}
+export NCCL_DEBUG=warn
+export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 
 echo "[RUN] SLURM_GPUS_ON_NODE=${SLURM_GPUS_ON_NODE}"
 echo "[RUN] SLURM_JOB_NODELIST=${SLURM_JOB_NODELIST}"
 echo "[RUN] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
 echo "[RUN] nvidia-smi -L:" && nvidia-smi -L || true
 
+NUM_GPUS=${SLURM_GPUS_ON_NODE:-1}
+
 # =============================================================================
-# Evaluation Configuration
+# Training Configuration
 # =============================================================================
-RECON_LOSS_KEY="LPIPS"
+SIGMA=0.2
+RECON_LOSS_KEY="DINOv2FeatureLoss"
 
 # --- Arguments for Hydra / Python module ---
 ARGS=(
-    # -----------------------------------------------------------------
-    # Device settings
-    # -----------------------------------------------------------------
-    experiment.device="cuda:0"
+    # Use the heuristic baseline experiment config
+    experiment=token_estimator_heuristic_baseline_training
 
     # -----------------------------------------------------------------
-    # Checkpoint path (trained model to evaluate)
+    # Optimizer settings
     # -----------------------------------------------------------------
-    # either lpips_with_heuristic_best or LPIPS_only_recon_loss_best (which is the one trained without heuristic features, only recon loss)
-    experiment.checkpoint_path="/BS/data_mani_compress/work/thesis/thesis/heuristic_baseline/checkpoint/LPIPS_with_normalization_64best_recon_loss_lpips_fix_class_count.pt"
+    experiment.optimizer.lr=0.001
 
     # -----------------------------------------------------------------
-    # Dataset settings (must match training config)
+    # Training settings
+    # -----------------------------------------------------------------
+    experiment.training.num_epochs=100
+    experiment.training.loss_training_classification.sigma=${SIGMA}
+
+    # -----------------------------------------------------------------
+    # Dataset settings
     # -----------------------------------------------------------------
     experiment.reconstruction_dataset.reconstruction_loss="${RECON_LOSS_KEY}"
-    experiment.reconstruction_dataset.batch_size=512
+    experiment.reconstruction_dataset.batch_size=1024
     experiment.reconstruction_dataset.num_workers=4
-    experiment.reconstruction_dataset.additional_feature_keys='["lid", "local_density"]' # '["lid", "local_density"]' or [] or '["dino_dist"]' depending on whether evaluating the model trained with or without heuristic features
+    experiment.reconstruction_dataset.additional_feature_keys='["dino_dist"]' #'["lid", "local_density"]' or '["dino_dist"]'
+
 
     # -----------------------------------------------------------------
-    # Model settings (must match training config)
+    # Model settings
     # -----------------------------------------------------------------
     experiment.model.num_classes=9
-    experiment.model.num_additional_features=2 # either 0 or 2 (for lid and local_density)
+    experiment.model.num_additional_features=1
     experiment.model.hidden_dim=64
-
-    # -----------------------------------------------------------------
-    # Evaluation settings
-    # -----------------------------------------------------------------
-    experiment.reconstruction_dataset.eval_per_class=true
-    experiment.reconstruction_dataset.eval_by_recon_loss_ranges=true
 
     # -----------------------------------------------------------------
     # Experiment metadata
     # -----------------------------------------------------------------
-    experiment.project_name="heuristic_baselines_evaluation"
-    experiment.experiment_name="eval_heuristic_${RECON_LOSS_KEY}_normalization_extra_layer"
-    experiment.group_name="heuristic_evaluation"
+    experiment.project_name="heuristic_baselines_classification"
+    experiment.experiment_name="heuristic_${RECON_LOSS_KEY}_sigma${SIGMA}_with_normalization_dino_dist_fix_class_count"
+    experiment.group_name="heuristic_token_prediction_fix_class_count"
+
+    # -----------------------------------------------------------------
+    # Checkpoint paths
+    # -----------------------------------------------------------------
+    experiment.checkpoint_path_best="/BS/data_mani_compress/work/thesis/thesis/heuristic_baseline/checkpoint/${RECON_LOSS_KEY}_with_normalization_64best_recon_loss_dino_dist_fix_class_count.pt"
+    experiment.checkpoint_path_latest="/BS/data_mani_compress/work/thesis/thesis/heuristic_baseline/checkpoint/${RECON_LOSS_KEY}_with_normalization_64latest_recon_loss_dino_dist_fix_class_count.pt"
 )
 
 # (Optional) print final args for debugging
@@ -95,5 +103,8 @@ echo "[RUN] Hydra args:"
 printf '  %q\n' "${ARGS[@]}"
 
 # --- Run ---
-# Note: Using single process since this is evaluation (no DDP needed)
-HYDRA_FULL_ERROR=1 python -m heuristic_baseline.eval "${ARGS[@]}"
+# Note: Using single GPU since this is a lightweight MLP (no need for DDP)
+# But torchrun still works for consistency with other scripts
+HYDRA_FULL_ERROR=1 torchrun --standalone --nproc_per_node="${NUM_GPUS}" \
+    -m heuristic_baseline.training \
+    "${ARGS[@]}"
